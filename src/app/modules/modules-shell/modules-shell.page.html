@@ -1,0 +1,61 @@
+<mat-sidenav-container class="shell-container" autosize>
+  <mat-sidenav
+    #sidenav
+    class="shell-sidenav"
+    [mode]="sidenavMode()"
+    [opened]="sidenavOpened()"
+    [disableClose]="!isHandset()"
+  >
+    <mat-nav-list aria-label="Menu principal">
+      <a
+        mat-list-item
+        routerLink="kanban"
+        routerLinkActive="active-link"
+        (click)="closeSidenavIfHandset()"
+      >
+        <mat-icon matListItemIcon>view_kanban</mat-icon>
+        <span matListItemTitle>KANBAN</span>
+      </a>
+    </mat-nav-list>
+  </mat-sidenav>
+
+  <mat-sidenav-content class="shell-content">
+    <mat-toolbar color="primary" class="shell-toolbar">
+      <button
+        mat-icon-button
+        type="button"
+        class="shell-toggle"
+        (click)="toggleSidenav()"
+        [attr.aria-expanded]="sidenavOpened()"
+        aria-controls="primary-sidenav"
+        aria-label="Alternar menu lateral"
+      >
+        <mat-icon>menu</mat-icon>
+      </button>
+
+      <span class="shell-title">Dev Manager Desk</span>
+
+      <span class="shell-spacer"></span>
+
+      @if (user(); as currentUser) {
+        <span class="shell-user" aria-label="Usuario autenticado">
+          {{ currentUser.name }}
+        </span>
+      }
+
+      <button
+        mat-icon-button
+        type="button"
+        class="shell-logout"
+        (click)="logout()"
+        aria-label="Cerrar sesion"
+      >
+        <mat-icon>logout</mat-icon>
+      </button>
+    </mat-toolbar>
+
+    <main class="shell-main">
+      <router-outlet />
+    </main>
+  </mat-sidenav-content>
+</mat-sidenav-container>

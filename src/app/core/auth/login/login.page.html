@@ -1,0 +1,73 @@
+<section class="login-shell">
+  <mat-card appearance="outlined" class="login-card">
+    <mat-card-header>
+      <mat-card-title>Dev Manager Desk</mat-card-title>
+      <mat-card-subtitle>Inicia sesion para continuar</mat-card-subtitle>
+    </mat-card-header>
+
+    <mat-card-content>
+      <form
+        class="login-form"
+        novalidate
+        (submit)="onSubmit($event)"
+        aria-labelledby="login-title"
+      >
+        <h1 id="login-title" class="visually-hidden">Formulario de inicio de sesion</h1>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Email</mat-label>
+          <input
+            matInput
+            type="email"
+            autocomplete="email"
+            placeholder="tu@email.com"
+            [formField]="loginForm.email"
+          />
+          <mat-icon matSuffix>mail</mat-icon>
+          @if (loginForm.email().errors().length > 0) {
+            <mat-error>{{ loginForm.email().errors()[0].message }}</mat-error>
+          }
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Contrasena</mat-label>
+          <input
+            matInput
+            type="password"
+            autocomplete="current-password"
+            placeholder="********"
+            [formField]="loginForm.password"
+          />
+          <mat-icon matSuffix>lock</mat-icon>
+          @if (loginForm.password().errors().length > 0) {
+            <mat-error>{{ loginForm.password().errors()[0].message }}</mat-error>
+          }
+        </mat-form-field>
+
+        @if (errorMessage(); as message) {
+          <p class="login-error" role="alert" aria-live="polite">{{ message }}</p>
+        }
+
+        <button
+          mat-flat-button
+          color="primary"
+          type="submit"
+          class="login-submit"
+          [disabled]="loginForm().submitting() || loginForm().invalid()"
+          aria-label="Iniciar sesion"
+        >
+          @if (loginForm().submitting()) {
+            <mat-spinner diameter="20"></mat-spinner>
+            <span>Ingresando...</span>
+          } @else {
+            <span>Iniciar sesion</span>
+          }
+        </button>
+
+        <p class="login-hint" aria-live="polite">
+          Usa tus credenciales de Dev Manager.
+        </p>
+      </form>
+    </mat-card-content>
+  </mat-card>
+</section>
