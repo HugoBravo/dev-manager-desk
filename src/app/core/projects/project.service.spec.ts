@@ -11,6 +11,8 @@ import type { Project } from './project.model';
 
 const API_BASE_URL = 'http://localhost:8000/api';
 const API_PREFIX = '/api/v1';
+const STORAGE_KEY = 'dev-manager-desk:project:selected';
+const LEGACY_STORAGE_KEY = 'dm:selectedProjectId';
 
 const sampleProject = (overrides: Partial<Project> = {}): Project => ({
   id: 7,
@@ -23,14 +25,16 @@ const sampleProject = (overrides: Partial<Project> = {}): Project => ({
   ...overrides,
 });
 
-function configure(storedId: number | null = null): {
+function configure(storedId: number | null = null, legacyId: number | null = null): {
   service: ProjectService;
   httpMock: HttpTestingController;
 } {
   TestBed.resetTestingModule();
   window.localStorage.clear();
-  if (storedId !== null) {
-    window.localStorage.setItem('dm:selectedProjectId', String(storedId));
+  if (legacyId !== null) {
+    window.localStorage.setItem(LEGACY_STORAGE_KEY, String(legacyId));
+  } else if (storedId !== null) {
+    window.localStorage.setItem(STORAGE_KEY, String(storedId));
   }
   TestBed.configureTestingModule({
     providers: [
@@ -75,8 +79,9 @@ describe('ProjectService', () => {
     req.flush(paginated([sampleProject({ id: 7 })]));
     await p;
     expect(service.currentId()).toBeNull();
-    expect(window.localStorage.getItem('dm:selectedProjectId')).toBeNull();
+    expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
     expect(service.projects().map((x) => x.id)).toEqual([7]);
+    expect(service.bootstrapError()).toBeNull();
     httpMock.verify();
   });
 
@@ -87,6 +92,7 @@ describe('ProjectService', () => {
     await p;
     expect(service.currentId()).toBe(7);
     expect(service.current()?.id).toBe(7);
+    expect(service.bootstrapError()).toBeNull();
     httpMock.verify();
   });
 
@@ -104,10 +110,10 @@ describe('ProjectService', () => {
     httpMock.verify();
   });
 
-  it('setActive() persists the id to localStorage under dm:selectedProjectId', () => {
+  it('setActive() persists the id to localStorage under dev-manager-desk:project:selected', () => {
     const { service } = configure();
     service.setActive(sampleProject({ id: 11 }));
-    expect(window.localStorage.getItem('dm:selectedProjectId')).toBe('11');
+    expect(window.localStorage.getItem(STORAGE_KEY)).toBe('11');
     expect(service.currentId()).toBe(11);
   });
 
@@ -115,7 +121,116 @@ describe('ProjectService', () => {
     const { service } = configure();
     service.setActive(sampleProject({ id: 11 }));
     service.setActive(null);
-    expect(window.localStorage.getItem('dm:selectedProjectId')).toBeNull();
+    expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
     expect(service.currentId()).toBeNull();
+  });
+
+  // -------- C1: bootstrap() preserves stored id on network failure --------
+
+  it('bootstrap() preserves stored id AND sets bootstrapError when fetch fails', async () => {
+    // Spec F3 + scenario 4: a network blip must NOT log the user out of
+    // their project. The toolbar can show `bootstrapError()` as a
+    // non-blocking warning.
+    const { service, httpMock } = configure(7);
+    const p = service.bootstrap();
+    const req = httpMock.expectOne(projectsUrl);
+    req.error(new ProgressEvent('error'), { status: 0, statusText: 'Unknown Error' });
+    await p;
+
+    expect(service.currentId()).toBe(7);
+    expect(window.localStorage.getItem(STORAGE_KEY)).toBe('7');
+    expect(service.bootstrapError()).not.toBeNull();
+    expect(service.bootstrapError()?.kind).toBe('network');
+    expect(service.isBootstrapped()).toBe(true);
+    httpMock.verify();
+  });
+
+  it('bootstrap() preserves stored id AND sets bootstrapError on 5xx', async () => {
+    // Same as above but for a server-side outage: the user keeps their
+    // last-known selection; bootstrapError surfaces the http kind.
+    const { service, httpMock } = configure(7);
+    const p = service.bootstrap();
+    const req = httpMock.expectOne(projectsUrl);
+    req.flush({ message: 'down' }, { status: 503, statusText: 'Service Unavailable' });
+    await p;
+
+    expect(service.currentId()).toBe(7);
+    expect(window.localStorage.getItem(STORAGE_KEY)).toBe('7');
+    expect(service.bootstrapError()?.kind).toBe('http');
+    expect(service.isBootstrapped()).toBe(true);
+    httpMock.verify();
+  });
+
+  it('bootstrap() with no stored id and network failure leaves current null and surfaces bootstrapError', async () => {
+    // First-run scenario + offline: current stays null (nothing to
+    // preserve), but bootstrapError is set so the toolbar can warn.
+    const { service, httpMock } = configure();
+    const p = service.bootstrap();
+    const req = httpMock.expectOne(projectsUrl);
+    req.error(new ProgressEvent('error'), { status: 0, statusText: 'Unknown Error' });
+    await p;
+
+    expect(service.currentId()).toBeNull();
+    expect(service.bootstrapError()?.kind).toBe('network');
+    expect(service.isBootstrapped()).toBe(true);
+    httpMock.verify();
+  });
+
+  it('bootstrap() clears stored id when fetch succeeds but id is missing from response', async () => {
+    // Server confirms the project is gone — clear it (this is the
+    // original stale-id behavior, still required for correctness).
+    const { service, httpMock } = configure(42);
+    const p = service.bootstrap();
+    httpMock.expectOne(projectsUrl).flush(paginated([sampleProject({ id: 7 })]));
+    await p;
+
+    expect(service.currentId()).toBeNull();
+    expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
+    expect(service.bootstrapError()).toBeNull();
+    httpMock.verify();
+  });
+
+  it('bootstrap() sets current from response when stored id is present', async () => {
+    // End-to-end success path: the response's project object becomes
+    // `current()`, not just the id.
+    const { service, httpMock } = configure(7);
+    const p = service.bootstrap();
+    httpMock.expectOne(projectsUrl).flush(paginated([sampleProject({ id: 7, name: 'Demo 7' })]));
+    await p;
+
+    expect(service.currentId()).toBe(7);
+    expect(service.current()?.name).toBe('Demo 7');
+    expect(service.bootstrapError()).toBeNull();
+    httpMock.verify();
+  });
+
+  // -------- W2: storage key migration --------
+
+  it('readStoredId() migrates the legacy `dm:selectedProjectId` key at construction', async () => {
+    // Pre-upgrade browsers had `dm:selectedProjectId`; the service's
+    // constructor migrates it to `dev-manager-desk:project:selected` so
+    // users are NOT logged out after the upgrade. Migration runs in
+    // readStoredId() — which the constructor invokes to seed the signal
+    // — so by the time TestBed.inject() returns, the legacy key is gone.
+    const { service, httpMock } = configure(undefined, 7);
+
+    // Post-construction assertion: legacy key was consumed, new key holds the id.
+    expect(service.currentId()).toBe(7);
+    expect(window.localStorage.getItem(STORAGE_KEY)).toBe('7');
+    expect(window.localStorage.getItem(LEGACY_STORAGE_KEY)).toBeNull();
+
+    // And bootstrap() still works (server confirms id 7).
+    const p = service.bootstrap();
+    httpMock.expectOne(projectsUrl).flush(paginated([sampleProject({ id: 7 })]));
+    await p;
+    expect(service.currentId()).toBe(7);
+    httpMock.verify();
+  });
+
+  it('setActive() writes under dev-manager-desk:project:selected (NOT the legacy key)', () => {
+    const { service } = configure();
+    service.setActive(sampleProject({ id: 11 }));
+    expect(window.localStorage.getItem(STORAGE_KEY)).toBe('11');
+    expect(window.localStorage.getItem(LEGACY_STORAGE_KEY)).toBeNull();
   });
 });

@@ -28,7 +28,12 @@ export type ApiError =
       readonly kind: 'conflict';
       readonly status: 409;
       readonly message: string;
-      readonly code: 'board_has_contents' | 'column_has_contents';
+      /**
+       * Optional. A typed 409 (board_has_contents / column_has_contents)
+       * carries a `code`; an untyped 409 does NOT — the UI must fall back
+       * to a generic conflict message via {@link ErrorNormalizer.toUserMessage}.
+       */
+      readonly code?: 'board_has_contents' | 'column_has_contents';
     }
   | {
       readonly kind: 'http';

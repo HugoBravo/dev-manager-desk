@@ -15,6 +15,24 @@ export interface NormalizeContext {
 /**
  * Pure normalizer. No I/O, no side effects, no logging. Safe to call from
  * inside `catchError` per request, in tests, and from store code.
+ *
+ * ## PR2+ wiring contract (non-negotiable)
+ *
+ * The 403 `edit_window_expired` discriminator (F4) ONLY activates when the
+ * caller passes URL + response headers into {@link NormalizeContext}. With
+ * a status + body pair alone, the URL heuristic gets nothing to inspect.
+ *
+ * Every PR2+ HTTP client (e.g. `KanbanApi`) MUST pipe `HttpErrorResponse`
+ * through `ErrorNormalizer.fromHttpErrorResponse(err)` (or
+ * `ErrorNormalizer.normalize(err)`) inside its `.pipe(catchError(...))`
+ * chain. A status+body pair alone is fine for typed 409 / 422 / 401 / 404
+ * cases; for 403, the caller must include the URL. The X-Kanban-Realm
+ * response header is forward-compat — if the backend ever sends it, callers
+ * SHOULD also forward response headers via `ctx.headers`.
+ *
+ * Callers that build errors from `fetch` or non-`HttpClient` paths should
+ * construct an `HttpErrorResponse` (or pass `{ url, headers }`) so this
+ * discriminator still fires.
  */
 export const ErrorNormalizer = {
   /**
@@ -96,13 +114,13 @@ export const ErrorNormalizer = {
           message: message ?? ERROR_MESSAGES.conflictGeneric,
         };
       }
+      // Untyped 409: NO `code` field set. The UI must fall back to a
+      // generic conflict message via toUserMessage() — leaking a typed
+      // code (e.g. 'board_has_contents') here would mislead users into
+      // thinking they need to "move columns first" for an arbitrary 409.
       return {
         kind: 'conflict',
         status: 409,
-        // The discriminated variant always has a `code`, but the type
-        // allows absent; fall back to a generic variant. Use the
-        // generic message either way.
-        code: 'board_has_contents',
         message: message ?? ERROR_MESSAGES.conflictGeneric,
       };
     }

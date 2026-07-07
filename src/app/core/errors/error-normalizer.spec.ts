@@ -120,6 +120,24 @@ describe('ErrorNormalizer', () => {
       const r = ErrorNormalizer.normalize(409, { message: 'Conflict' });
       expect(r.kind).toBe('conflict');
     });
+
+    it('untyped 409 leaves `code` undefined (no leaked `board_has_contents`)', () => {
+      // Spec F1 + scenario 7: an arbitrary 409 must NOT carry a typed
+      // code; the UI must fall back to a generic message. Previously the
+      // normalizer force-narrowed to `'board_has_contents'`, which misled
+      // users into "move columns first" copy for unrelated conflicts.
+      const r = ErrorNormalizer.normalize(409, { message: 'Conflict' });
+      if (r.kind !== 'conflict') throw new Error('expected conflict');
+      expect(r.code).toBeUndefined();
+      expect(r.message).toBe('Conflict');
+    });
+
+    it('untyped 409 toUserMessage falls back to generic conflict copy', () => {
+      const r = ErrorNormalizer.normalize(409, { message: 'Conflict' });
+      expect(ErrorNormalizer.toUserMessage(r)).toBe(
+        'This action conflicts with the current state.',
+      );
+    });
   });
 
   describe('422 typed codes', () => {
