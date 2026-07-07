@@ -37,6 +37,8 @@
 
       <span class="shell-spacer"></span>
 
+      <app-toolbar-project-picker class="shell-picker"></app-toolbar-project-picker>
+
       @if (user(); as currentUser) {
         <span class="shell-user" aria-label="Usuario autenticado">
           {{ currentUser.name }}

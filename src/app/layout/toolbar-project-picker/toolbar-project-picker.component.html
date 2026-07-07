@@ -1,0 +1,24 @@
+<div class="picker-wrapper" aria-live="polite">
+  @if (isBusy()) {
+    <mat-progress-bar
+      mode="indeterminate"
+      aria-label="Loading projects"
+    ></mat-progress-bar>
+  } @else {
+    <mat-form-field appearance="outline" class="picker-field" subscriptSizing="dynamic">
+      <mat-label>Project</mat-label>
+      <mat-select
+        [value]="current()?.id ?? null"
+        (selectionChange)="onSelectionChange($event.value)"
+        aria-label="Project"
+        [disabled]="projects().length === 0"
+      >
+        @for (project of projects(); track project.id) {
+          <mat-option [value]="project.id">{{ project.name }}</mat-option>
+        } @empty {
+          <mat-option [value]="null" disabled>No projects available</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+  }
+</div>

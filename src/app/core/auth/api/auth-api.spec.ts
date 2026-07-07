@@ -6,6 +6,7 @@ import {
 import { provideHttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 
+import { API_CONFIG } from '../../config/api-config';
 import { AuthApi } from './auth-api';
 import type { AuthResponse, User, UserResponse } from '../auth.types';
 
@@ -17,7 +18,11 @@ describe('AuthApi', () => {
 
   beforeEach(() => {
     TestBed.configureTestingModule({
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        { provide: API_CONFIG, useValue: { apiBaseUrl: API_BASE_URL, apiPrefix: '/api/v1' } },
+      ],
     });
     api = TestBed.inject(AuthApi);
     httpMock = TestBed.inject(HttpTestingController);

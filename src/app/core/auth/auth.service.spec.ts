@@ -7,6 +7,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideRouter } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 
+import { API_CONFIG } from '../config/api-config';
 import { AuthService } from './auth.service';
 import type { AuthResponse, User } from './auth.types';
 
@@ -43,6 +44,7 @@ describe('AuthService', () => {
         provideHttpClient(),
         provideHttpClientTesting(),
         provideRouter(TEST_ROUTES),
+        { provide: API_CONFIG, useValue: { apiBaseUrl: API_BASE_URL, apiPrefix: '/api/v1' } },
       ],
     });
     service = TestBed.inject(AuthService);
@@ -72,6 +74,7 @@ describe('AuthService', () => {
           provideHttpClient(),
           provideHttpClientTesting(),
           provideRouter(TEST_ROUTES),
+          { provide: API_CONFIG, useValue: { apiBaseUrl: API_BASE_URL, apiPrefix: '/api/v1' } },
         ],
       });
       const rehydrated = TestBed.inject(AuthService);
@@ -190,6 +193,7 @@ describe('AuthService', () => {
           provideHttpClient(),
           provideHttpClientTesting(),
           provideRouter(TEST_ROUTES),
+          { provide: API_CONFIG, useValue: { apiBaseUrl: API_BASE_URL, apiPrefix: '/api/v1' } },
         ],
       });
       const svc = TestBed.inject(AuthService);
@@ -215,6 +219,7 @@ describe('AuthService', () => {
           provideHttpClient(),
           provideHttpClientTesting(),
           provideRouter(TEST_ROUTES),
+          { provide: API_CONFIG, useValue: { apiBaseUrl: API_BASE_URL, apiPrefix: '/api/v1' } },
         ],
       });
       const svc = TestBed.inject(AuthService);
@@ -246,6 +251,7 @@ describe('AuthService', () => {
           provideHttpClient(),
           provideHttpClientTesting(),
           provideRouter(TEST_ROUTES),
+          { provide: API_CONFIG, useValue: { apiBaseUrl: API_BASE_URL, apiPrefix: '/api/v1' } },
         ],
       });
       const svc = TestBed.inject(AuthService);
@@ -276,6 +282,7 @@ describe('AuthService', () => {
           provideHttpClient(),
           provideHttpClientTesting(),
           provideRouter(TEST_ROUTES),
+          { provide: API_CONFIG, useValue: { apiBaseUrl: API_BASE_URL, apiPrefix: '/api/v1' } },
         ],
       });
       const svc = TestBed.inject(AuthService);
@@ -316,6 +323,7 @@ describe('AuthService', () => {
           provideHttpClient(),
           provideHttpClientTesting(),
           provideRouter(TEST_ROUTES),
+          { provide: API_CONFIG, useValue: { apiBaseUrl: API_BASE_URL, apiPrefix: '/api/v1' } },
         ],
       });
       const svc = TestBed.inject(AuthService);
@@ -345,6 +353,7 @@ describe('AuthService', () => {
           provideHttpClient(),
           provideHttpClientTesting(),
           provideRouter(TEST_ROUTES),
+          { provide: API_CONFIG, useValue: { apiBaseUrl: API_BASE_URL, apiPrefix: '/api/v1' } },
         ],
       });
       const svc = TestBed.inject(AuthService);
@@ -369,6 +378,7 @@ describe('AuthService', () => {
           provideHttpClient(),
           provideHttpClientTesting(),
           provideRouter(TEST_ROUTES),
+          { provide: API_CONFIG, useValue: { apiBaseUrl: API_BASE_URL, apiPrefix: '/api/v1' } },
         ],
       });
       const svc = TestBed.inject(AuthService);

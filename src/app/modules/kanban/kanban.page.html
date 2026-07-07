@@ -1,16 +1,31 @@
 <section class="kanban-placeholder">
-  <mat-card appearance="outlined" class="kanban-card">
-    <mat-card-header>
-      <mat-icon mat-card-avatar aria-hidden="true">view_kanban</mat-icon>
-      <mat-card-title>KANBAN</mat-card-title>
-      <mat-card-subtitle>Proximamente</mat-card-subtitle>
-    </mat-card-header>
-    <mat-card-content>
-      <p>
-        Esta funcionalidad estara disponible proximamente. Aqui podras
-        gestionar tus tableros, columnas y tarjetas con flujo de trabajo
-        en tiempo real.
-      </p>
-    </mat-card-content>
-  </mat-card>
+  @if (current(); as active) {
+    <mat-card appearance="outlined" class="kanban-card">
+      <mat-card-header>
+        <mat-icon mat-card-avatar aria-hidden="true">view_kanban</mat-icon>
+        <mat-card-title>KANBAN</mat-card-title>
+        <mat-card-subtitle>{{ active.name }}</mat-card-subtitle>
+      </mat-card-header>
+      <mat-card-content>
+        <p>
+          Boards for <strong>{{ active.name }}</strong> will appear here in a
+          future update.
+        </p>
+      </mat-card-content>
+    </mat-card>
+  } @else {
+    <mat-card appearance="outlined" class="kanban-card">
+      <mat-card-header>
+        <mat-icon mat-card-avatar aria-hidden="true">view_kanban</mat-icon>
+        <mat-card-title>KANBAN</mat-card-title>
+        <mat-card-subtitle>No project selected</mat-card-subtitle>
+      </mat-card-header>
+      <mat-card-content>
+        <p>
+          Select a project from the toolbar picker to start managing your
+          boards, columns, and cards.
+        </p>
+      </mat-card-content>
+    </mat-card>
+  }
 </section>
