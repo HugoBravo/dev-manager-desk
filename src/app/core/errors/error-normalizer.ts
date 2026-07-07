@@ -34,7 +34,40 @@ export interface NormalizeContext {
  * construct an `HttpErrorResponse` (or pass `{ url, headers }`) so this
  * discriminator still fires.
  */
-export const ErrorNormalizer = {
+interface ErrorNormalizerShape {
+  normalize(
+    errorOrStatus: HttpErrorResponse | number,
+    body?: unknown,
+    context?: NormalizeContext,
+  ): ApiError;
+  fromHttpErrorResponse(
+    error: HttpErrorResponse,
+    context?: NormalizeContext,
+  ): ApiError;
+  fromStatusAndBody(
+    status: number,
+    body: unknown,
+    context?: NormalizeContext,
+  ): ApiError;
+  mapForbidden(
+    context: NormalizeContext,
+    message: string | undefined,
+  ): ApiError;
+  toUserMessage(error: ApiError): string;
+  fromSynthetic(kind: 'notFound', message: string): ApiError;
+  fromSynthetic(
+    kind: 'validation',
+    message: string,
+    fieldErrors?: Readonly<Record<string, readonly string[]>>,
+  ): ApiError;
+  fromSynthetic(
+    kind: 'notFound' | 'validation',
+    message?: string,
+    fieldErrors?: Readonly<Record<string, readonly string[]>>,
+  ): ApiError;
+}
+
+export const ErrorNormalizer: ErrorNormalizerShape = {
   /**
    * Convert an `HttpErrorResponse` (or a status + body pair) into a typed
    * {@link ApiError}.
@@ -239,7 +272,47 @@ export const ErrorNormalizer = {
         return ERROR_MESSAGES.httpGeneric(error.status);
     }
   },
-} as const;
+
+  /**
+   * Build a typed {@link ApiError} for a non-HTTP failure (e.g. a guard
+   * discovered the precondition is missing, a synthetic data-shape error).
+   * Use sparingly — prefer routing through `normalize`/`fromHttpErrorResponse`
+   * so the W3 wiring contract is exercised. Only call this when there is no
+   * HTTP request to inspect.
+   */
+  fromSynthetic(
+    kindOrMessage: 'notFound' | 'validation',
+    messageOrFieldErrors?: string | Readonly<Record<string, readonly string[]>>,
+    fieldErrorsParam?: Readonly<Record<string, readonly string[]>>,
+  ): ApiError {
+    if (kindOrMessage === 'notFound') {
+      return {
+        kind: 'notFound',
+        status: 404,
+        message: typeof messageOrFieldErrors === 'string' ? messageOrFieldErrors : 'Not found.',
+      };
+    }
+    if (Array.isArray(messageOrFieldErrors) || typeof messageOrFieldErrors === 'object') {
+      // Caller passed `(kind, fieldErrors)` — message is undefined.
+      const fieldErrors =
+        (typeof messageOrFieldErrors === 'object'
+          ? messageOrFieldErrors
+          : fieldErrorsParam) ?? {};
+      return {
+        kind: 'validation',
+        status: 422,
+        message: 'Validation failed.',
+        fieldErrors,
+      };
+    }
+    return {
+      kind: 'validation',
+      status: 422,
+      message: typeof messageOrFieldErrors === 'string' ? messageOrFieldErrors : 'Validation failed.',
+      fieldErrors: fieldErrorsParam ?? {},
+    };
+  },
+};
 
 interface Envelope {
   readonly message?: string;

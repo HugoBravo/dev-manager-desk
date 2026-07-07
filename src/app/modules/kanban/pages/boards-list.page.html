@@ -1,0 +1,81 @@
+<section class="boards-wrapper" aria-live="polite" aria-busy="true">
+  @if (loading()) {
+    <div class="state-loading" role="status" aria-live="polite">
+      <mat-progress-spinner
+        mode="indeterminate"
+        diameter="48"
+        aria-label="Loading boards"
+      ></mat-progress-spinner>
+      <p class="state-text">Loading boards</p>
+    </div>
+  } @else if (error(); as apiError) {
+    <mat-card appearance="outlined" class="state-error" role="alert">
+      <mat-card-header>
+        <mat-icon mat-card-avatar aria-hidden="true">error_outline</mat-icon>
+        <mat-card-title>Couldn't load boards</mat-card-title>
+      </mat-card-header>
+      <mat-card-content>
+        <p>{{ statusMessage() }}</p>
+      </mat-card-content>
+      <mat-card-actions>
+        <button
+          mat-stroked-button
+          type="button"
+          (click)="retry()"
+          aria-label="Retry loading boards"
+        >
+          Retry
+        </button>
+      </mat-card-actions>
+    </mat-card>
+  } @else if (boards().length === 0) {
+    <mat-card appearance="outlined" class="state-empty">
+      <mat-card-header>
+        <mat-icon mat-card-avatar aria-hidden="true">dashboard_customize</mat-icon>
+        <mat-card-title>No boards yet</mat-card-title>
+        <mat-card-subtitle>
+          @if (current(); as project) {
+            {{ project.name }} does not have any boards.
+          } @else {
+            Boards will appear here once created.
+          }
+        </mat-card-subtitle>
+      </mat-card-header>
+      <mat-card-content>
+        <p>Creating boards is part of a future update.</p>
+      </mat-card-content>
+    </mat-card>
+  } @else {
+    <h1 class="boards-title">
+      @if (current(); as project) {
+        Boards for {{ project.name }}
+      } @else {
+        Boards
+      }
+    </h1>
+    <ul class="boards-list" aria-label="Boards">
+      @for (board of boards(); track board.id) {
+        <li class="boards-list-item">
+          <mat-card appearance="outlined" class="board-card">
+            <mat-card-header>
+              <mat-card-title>{{ board.name }}</mat-card-title>
+              @if (board.archived_at) {
+                <mat-card-subtitle>Archived</mat-card-subtitle>
+              }
+            </mat-card-header>
+            <mat-card-actions>
+              <button
+                mat-stroked-button
+                type="button"
+                (click)="openBoard(board.id)"
+                [attr.aria-label]="'Open board ' + board.name"
+              >
+                Open
+              </button>
+            </mat-card-actions>
+          </mat-card>
+        </li>
+      }
+    </ul>
+  }
+</section>
