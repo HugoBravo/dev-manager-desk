@@ -10,7 +10,8 @@ import type { ApiError } from '../../../core/errors/api-error';
 import { KanbanWriteApi } from './kanban-write.api';
 
 const API_BASE_URL = 'http://localhost:8000/api';
-const API_PREFIX = '/api/v1';
+// `apiBaseUrl` already ends in `/api`, so the v1 prefix is `/v1`.
+const API_PREFIX = '/v1';
 const FULL_PREFIX = `${API_BASE_URL}${API_PREFIX}`;
 
 const cardsBase = (projectId: number, boardId: number, columnId: number) =>
@@ -40,7 +41,7 @@ describe('KanbanWriteApi', () => {
         provideHttpClientTesting(),
         {
           provide: API_CONFIG,
-          useValue: { apiBaseUrl: API_BASE_URL, apiPrefix: API_PREFIX },
+          useValue: { apiBaseUrl: API_BASE_URL },
         },
         KanbanWriteApi,
       ],

@@ -180,7 +180,7 @@ export class KanbanWriteApi {
     boardId: number,
     columnId: number,
   ): string {
-    const prefix = `${this.apiConfig.apiBaseUrl}${this.apiConfig.apiPrefix}`;
+    const prefix = `${this.apiConfig.apiBaseUrl}/v1`;
     return `${prefix}/projects/${projectId}/kanban/boards/${boardId}/columns/${columnId}`;
   }
 }

@@ -16,7 +16,7 @@ import { BoardsStore } from '../stores/boards.store';
 import { BoardDetailPage } from './board-detail.page';
 
 const API_BASE_URL = 'http://localhost:8000/api';
-const API_PREFIX = '/api/v1';
+const API_PREFIX = '/v1';
 const FULL_PREFIX = `${API_BASE_URL}${API_PREFIX}`;
 
 const sampleBoard = () => ({
@@ -122,7 +122,7 @@ describe('BoardDetailPage', () => {
         provideRouter([]),
         {
           provide: API_CONFIG,
-          useValue: { apiBaseUrl: API_BASE_URL, apiPrefix: API_PREFIX },
+          useValue: { apiBaseUrl: API_BASE_URL },
         },
         KanbanApi,
         KanbanWriteApi,

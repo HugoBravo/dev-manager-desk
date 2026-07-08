@@ -18,7 +18,7 @@ import {
 } from './card-editor-dialog';
 
 const API_BASE_URL = 'http://localhost:8000/api';
-const API_PREFIX = '/api/v1';
+const API_PREFIX = '/v1';
 const FULL_PREFIX = `${API_BASE_URL}${API_PREFIX}`;
 
 const baseData: CardEditorDialogData = {
@@ -37,7 +37,7 @@ function mountDialog(data: Partial<CardEditorDialogData> = {}) {
       provideHttpClientTesting(),
       {
         provide: API_CONFIG,
-        useValue: { apiBaseUrl: API_BASE_URL, apiPrefix: API_PREFIX },
+        useValue: { apiBaseUrl: API_BASE_URL },
       },
       KanbanApi,
       KanbanWriteApi,

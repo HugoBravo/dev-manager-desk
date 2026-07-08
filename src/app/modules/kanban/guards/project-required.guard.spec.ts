@@ -16,7 +16,7 @@ import { ProjectService } from '../../../core/projects/project.service';
 import { projectRequiredGuard, requireProjectId } from './project-required.guard';
 
 const API_BASE_URL = 'http://localhost:8000/api';
-const API_PREFIX = '/api/v1';
+const API_PREFIX = '/v1';
 const PROJECTS_URL = `${API_BASE_URL}${API_PREFIX}/projects`;
 
 function snapshot(id: string | null): ActivatedRouteSnapshot {
@@ -73,7 +73,7 @@ describe('projectRequiredGuard', () => {
         provideHttpClientTesting(),
         {
           provide: API_CONFIG,
-          useValue: { apiBaseUrl: API_BASE_URL, apiPrefix: API_PREFIX },
+          useValue: { apiBaseUrl: API_BASE_URL },
         },
       ],
     });

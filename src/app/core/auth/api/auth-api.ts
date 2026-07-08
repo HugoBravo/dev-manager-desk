@@ -19,8 +19,8 @@ const DEVICE_NAME = 'dev-manager-desk:browser';
  * performs the request shaping. State management lives in {@link AuthService}.
  *
  * URLs are composed from {@link API_CONFIG.apiBaseUrl} (e.g.
- * `http://localhost:8000/api`) plus the per-endpoint path. The `/api` root is
- * shared with the v1 kanban resources; only the `apiPrefix` differs.
+ * `http://localhost:8000/api`, which already includes the `/api` root shared
+ * with the v1 kanban resources) plus the per-endpoint path.
  */
 @Injectable({ providedIn: 'root' })
 export class AuthApi {

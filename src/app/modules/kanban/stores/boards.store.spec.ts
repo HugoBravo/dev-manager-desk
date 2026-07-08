@@ -11,7 +11,7 @@ import type { BoardDetail, KanbanCard } from '../models';
 import { BoardsStore } from './boards.store';
 
 const API_BASE_URL = 'http://localhost:8000/api';
-const API_PREFIX = '/api/v1';
+const API_PREFIX = '/v1';
 const FULL_PREFIX = `${API_BASE_URL}${API_PREFIX}`;
 
 const sampleCard = (
@@ -78,7 +78,7 @@ describe('BoardsStore', () => {
         provideHttpClientTesting(),
         {
           provide: API_CONFIG,
-          useValue: { apiBaseUrl: API_BASE_URL, apiPrefix: API_PREFIX },
+          useValue: { apiBaseUrl: API_BASE_URL },
         },
         KanbanApi,
         BoardsStore,
