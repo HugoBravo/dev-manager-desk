@@ -1,9 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
-import {
-  HttpTestingController,
-  provideHttpClientTesting,
-} from '@angular/common/http/testing';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { provideRouter } from '@angular/router';
 import { signal } from '@angular/core';
@@ -23,6 +20,7 @@ import { KanbanWriteApi } from '../../api/kanban-write.api';
 import { BoardsStore } from '../../stores/boards.store';
 import { CommentsStore } from '../../stores/comments.store';
 import { AttachmentsStore } from '../../stores/attachments.store';
+import { LabelsStore } from '../../stores/labels.store';
 import {
   CardDetailDialog,
   type CardDetailDialogData,
@@ -43,6 +41,7 @@ const sampleCard = (overrides: Partial<KanbanCard> = {}): KanbanCard => ({
   due_date: null,
   archived_at: null,
   position: 'k',
+  labels: [],
   created_at: '2026-01-01T00:00:00Z',
   updated_at: '2026-01-01T00:00:00Z',
   ...overrides,
@@ -50,9 +49,7 @@ const sampleCard = (overrides: Partial<KanbanCard> = {}): KanbanCard => ({
 
 function mountDialog(opts: { archived?: boolean } = {}) {
   TestBed.resetTestingModule();
-  const card = sampleCard(
-    opts.archived ? { archived_at: '2026-07-07T15:42:18.000000Z' } : {},
-  );
+  const card = sampleCard(opts.archived ? { archived_at: '2026-07-07T15:42:18.000000Z' } : {});
   const triggerElement = document.createElement('button');
   triggerElement.textContent = 'open trigger';
   document.body.appendChild(triggerElement);
@@ -70,9 +67,12 @@ function mountDialog(opts: { archived?: boolean } = {}) {
       BoardsStore,
       CommentsStore,
       AttachmentsStore,
+      LabelsStore,
       {
         provide: AuthService,
-        useValue: { user: signal<unknown>({ id: 1, email: 'me@x', name: 'Me', email_verified_at: null }) },
+        useValue: {
+          user: signal<unknown>({ id: 1, email: 'me@x', name: 'Me', email_verified_at: null }),
+        },
       },
       {
         provide: MAT_DIALOG_DATA,
@@ -95,6 +95,12 @@ function mountDialog(opts: { archived?: boolean } = {}) {
   });
 
   const fixture = TestBed.createComponent(CardDetailDialog);
+  // Pre-seed the label library cache so `ensureLoaded()` is a no-op
+  // (the dialog's ngOnInit fires it). The picker tests use an empty
+  // cache; the label-sync tests seed it explicitly before mounting.
+  const labelsStore = TestBed.inject(LabelsStore);
+  labelsStore.labelsCache.set([]);
+  labelsStore.__markLoadedForTests();
   fixture.detectChanges();
 
   return {
@@ -102,13 +108,17 @@ function mountDialog(opts: { archived?: boolean } = {}) {
     httpMock: TestBed.inject(HttpTestingController),
     dialog: TestBed.inject(MatDialog),
     snackBar: TestBed.inject(MatSnackBar),
+    labelsStore,
     closeSpy,
     triggerElement,
   };
 }
 
 /** Wait several ticks so async click handlers reach their awaits. */
-async function stabilize(fixture: { whenStable: () => Promise<unknown>; detectChanges: () => void }, n = 3) {
+async function stabilize(
+  fixture: { whenStable: () => Promise<unknown>; detectChanges: () => void },
+  n = 3,
+) {
   for (let i = 0; i < n; i++) {
     await fixture.whenStable();
     fixture.detectChanges();
@@ -133,7 +143,10 @@ describe('CardDetailDialog', () => {
   function flushInitialLoads(
     httpMock: HttpTestingController,
     base: string,
-  ): { commentsReq: ReturnType<HttpTestingController['expectOne']>; attachmentsReq: ReturnType<HttpTestingController['expectOne']> } {
+  ): {
+    commentsReq: ReturnType<HttpTestingController['expectOne']>;
+    attachmentsReq: ReturnType<HttpTestingController['expectOne']>;
+  } {
     const commentsReq = httpMock.expectOne(`${base}/comments`);
     commentsReq.flush({ data: [] });
     const attachmentsReq = httpMock.expectOne(`${base}/attachments`);
@@ -167,9 +180,9 @@ describe('CardDetailDialog', () => {
     const editorHost = document.body.querySelector('app-card-editor-dialog');
     expect(editorHost).not.toBeNull();
     expect(editorHost?.textContent).toContain('Edit');
-    expect(
-      editorHost?.querySelector<HTMLInputElement>('input[type="text"]')?.value,
-    ).toBe('Implement login form');
+    expect(editorHost?.querySelector<HTMLInputElement>('input[type="text"]')?.value).toBe(
+      'Implement login form',
+    );
   });
 
   it('shows Restore (and hides Archive) when the card is archived', () => {
@@ -184,26 +197,32 @@ describe('CardDetailDialog', () => {
   it.each([
     ['Archive', 'archive', false, sampleCard({ archived_at: '2026-07-07T16:00:00.000000Z' })],
     ['Restore', 'restore', true, sampleCard({ archived_at: null })],
-  ] as const)('%s button calls %sCard and closes with the %sed card', async (_label, verb, archived, updated) => {
-    const { fixture, httpMock, closeSpy } = mountDialog({ archived });
-    flushInitialLoads(httpMock, baseUrl());
-    await fixture.whenStable();
-    const button = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(
-      `button[aria-label="${_label} card"]`,
-    )!;
-    button.click();
-    fixture.detectChanges();
-    await fixture.whenStable();
+  ] as const)(
+    '%s button calls %sCard and closes with the %sed card',
+    async (_label, verb, archived, updated) => {
+      const { fixture, httpMock, closeSpy } = mountDialog({ archived });
+      flushInitialLoads(httpMock, baseUrl());
+      await fixture.whenStable();
+      const button = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(
+        `button[aria-label="${_label} card"]`,
+      )!;
+      button.click();
+      fixture.detectChanges();
+      await fixture.whenStable();
 
-    const req = httpMock.expectOne(`${cardsBase(7, 4, 12)}/87/${verb}`);
-    expect(req.request.method).toBe('POST');
-    req.flush(updated);
-    await fixture.whenStable();
+      const req = httpMock.expectOne(`${cardsBase(7, 4, 12)}/87/${verb}`);
+      expect(req.request.method).toBe('POST');
+      req.flush(updated);
+      await fixture.whenStable();
 
-    expect(closeSpy).toHaveBeenCalledTimes(1);
-    expect(closeSpy).toHaveBeenCalledWith({ action: verb === 'archive' ? 'archived' : 'restored', card: updated });
-    httpMock.verify();
-  });
+      expect(closeSpy).toHaveBeenCalledTimes(1);
+      expect(closeSpy).toHaveBeenCalledWith({
+        action: verb === 'archive' ? 'archived' : 'restored',
+        card: updated,
+      });
+      httpMock.verify();
+    },
+  );
 
   it('Delete button calls deleteCard and closes on 204', async () => {
     const { fixture, httpMock, closeSpy } = mountDialog();
@@ -288,9 +307,9 @@ describe('CardDetailDialog', () => {
     expect(document.activeElement).toBe(triggerElement);
 
     // Material's focus trap closes on Escape; assert the spy wiring.
-    (
-      TestBed.inject(MatDialogRef) as unknown as { close: (r: unknown) => void }
-    ).close({ action: 'closed' });
+    (TestBed.inject(MatDialogRef) as unknown as { close: (r: unknown) => void }).close({
+      action: 'closed',
+    });
     expect(closeSpy).toHaveBeenCalledWith({ action: 'closed' });
   });
 

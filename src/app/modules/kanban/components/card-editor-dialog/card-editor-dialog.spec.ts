@@ -1,9 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
-import {
-  HttpTestingController,
-  provideHttpClientTesting,
-} from '@angular/common/http/testing';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 
@@ -12,10 +9,7 @@ import { KanbanApi } from '../../api/kanban.api';
 import { KanbanWriteApi } from '../../api/kanban-write.api';
 import { BoardsStore } from '../../stores/boards.store';
 import type { KanbanCard } from '../../models';
-import {
-  CardEditorDialog,
-  type CardEditorDialogData,
-} from './card-editor-dialog';
+import { CardEditorDialog, type CardEditorDialogData } from './card-editor-dialog';
 
 const API_BASE_URL = 'http://localhost:8000/api';
 const API_PREFIX = '/v1';
@@ -60,6 +54,7 @@ const sampleCard: KanbanCard = {
   due_date: null,
   archived_at: null,
   position: 'k',
+  labels: [],
   created_at: '2026-01-01T00:00:00Z',
   updated_at: '2026-01-01T00:00:00Z',
 };

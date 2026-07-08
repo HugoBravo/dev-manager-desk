@@ -57,8 +57,7 @@ export class BoardsStore {
    */
   readonly boardsCache = {
     set: (boards: readonly Board[]) => this._boards.set(boards),
-    update: (fn: (prev: readonly Board[]) => readonly Board[]) =>
-      this._boards.update(fn),
+    update: (fn: (prev: readonly Board[]) => readonly Board[]) => this._boards.update(fn),
   };
   readonly currentBoard = this._currentBoard.asReadonly();
   readonly loading = this._loading.asReadonly();
@@ -97,16 +96,11 @@ export class BoardsStore {
    * detail cache. On error, sets `store.error()` and returns `null` so the
    * page renders the error state without a re-throw.
    */
-  async loadBoard(
-    projectId: number,
-    boardId: number,
-  ): Promise<BoardDetail | null> {
+  async loadBoard(projectId: number, boardId: number): Promise<BoardDetail | null> {
     this._loading.set('detail');
     this._error.set(null);
     try {
-      const detail = await firstValueFrom(
-        this.api.getBoardDetail(projectId, boardId),
-      );
+      const detail = await firstValueFrom(this.api.getBoardDetail(projectId, boardId));
       this._currentBoard.set(detail);
       return detail;
     } catch (err) {
@@ -133,11 +127,7 @@ export class BoardsStore {
     if (current === null) {
       return;
     }
-    const previousColumnId = findPreviousColumn(
-      current,
-      card.id,
-      card.column_id,
-    );
+    const previousColumnId = findPreviousColumn(current, card.id, card.column_id);
     const nextCardsByColumn: Record<string, readonly KanbanCard[]> = {
       ...current.cardsByColumnId,
     };
@@ -226,6 +216,45 @@ export class BoardsStore {
   }
 
   /**
+   * Strip a label id out of every card's `labels` array across every
+   * column in the current board. Used by {@link LabelsStore.remove}
+   * after a successful DELETE so the UI doesn't render an orphan chip
+   * that the server has already unlinked via FK cascade.
+   *
+   * No-op if the current board is `null` or no card carried the label.
+   * The method never reaches for the network — it's a pure cache
+   * mutation.
+   */
+  pruneLabelFromCards(labelId: number): void {
+    const current = this._currentBoard();
+    if (current === null) {
+      return;
+    }
+    let changed = false;
+    const nextCardsByColumn: Record<string, readonly KanbanCard[]> = {};
+    for (const [columnId, cards] of Object.entries(current.cardsByColumnId)) {
+      const stripped = cards.map((c) => {
+        if (!c.labels.some((l) => l.id === labelId)) {
+          return c;
+        }
+        changed = true;
+        return {
+          ...c,
+          labels: c.labels.filter((l) => l.id !== labelId),
+        };
+      });
+      nextCardsByColumn[columnId] = stripped;
+    }
+    if (!changed) {
+      return;
+    }
+    this._currentBoard.set({
+      ...current,
+      cardsByColumnId: nextCardsByColumn,
+    });
+  }
+
+  /**
    * Convenience accessor for components that want to import the write API
    * through the same surface. Not strictly necessary — pages inject
    * `KanbanWriteApi` directly — but documented so consumers understand the
@@ -304,7 +333,10 @@ function toApiError(err: unknown): ApiError {
     kind: 'network',
     status: 0,
     message:
-      err && typeof err === 'object' && 'message' in err && typeof (err as { message: unknown }).message === 'string'
+      err &&
+      typeof err === 'object' &&
+      'message' in err &&
+      typeof (err as { message: unknown }).message === 'string'
         ? (err as { message: string }).message
         : 'Could not reach the server.',
   };

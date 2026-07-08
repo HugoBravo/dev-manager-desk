@@ -1,8 +1,4 @@
-import {
-  CdkDrag,
-  CdkDragDrop,
-  CdkDropList,
-} from '@angular/cdk/drag-drop';
+import { CdkDrag, CdkDragDrop, CdkDropList } from '@angular/cdk/drag-drop';
 import { CdkDropListGroup } from '@angular/cdk/drag-drop';
 import {
   Component,
@@ -17,6 +13,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { firstValueFrom } from 'rxjs';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatDialog } from '@angular/material/dialog';
@@ -39,6 +36,12 @@ import {
   type CardEditorDialogData,
   type CardEditorDialogResult,
 } from '../components/card-editor-dialog/card-editor-dialog';
+import { CardLabelsStrip } from '../components/card-labels-strip/card-labels-strip';
+import {
+  LabelManagerDialog,
+  type LabelManagerDialogData,
+  type LabelManagerDialogResult,
+} from '../components/label-manager-dialog/label-manager-dialog';
 import type { BoardDetail, KanbanCard, KanbanColumn } from '../models';
 import { BoardsStore } from '../stores/boards.store';
 import { serverConfirmedMove } from '../utils/server-confirmed-move';
@@ -71,6 +74,7 @@ import { serverConfirmedMove } from '../utils/server-confirmed-move';
     MatCardModule,
     MatIconModule,
     MatProgressSpinnerModule,
+    CardLabelsStrip,
   ],
   templateUrl: './board-detail.page.html',
   styleUrl: './board-detail.page.scss',
@@ -94,9 +98,7 @@ export class BoardDetailPage implements AfterViewInit {
 
   protected readonly loading = computed(() => this.store.isDetailLoading());
   protected readonly error = computed(() => this.store.error());
-  protected readonly detail = computed<BoardDetail | null>(
-    () => this.store.currentBoard(),
-  );
+  protected readonly detail = computed<BoardDetail | null>(() => this.store.currentBoard());
   // Reactive accessor for the cards-by-column map. Templates must read this
   // signal directly (not via the plain `cardsFor()` function) so change
   // detection re-runs after a mutation (create / archive / restore / move).
@@ -116,8 +118,7 @@ export class BoardDetailPage implements AfterViewInit {
     return '';
   });
 
-  protected readonly columnHeadingId = (columnId: number): string =>
-    `board-column-${columnId}`;
+  protected readonly columnHeadingId = (columnId: number): string => `board-column-${columnId}`;
 
   /** Lookup a card by id within the current board (or `null`). */
   protected readonly cardById = (cardId: number): KanbanCard | null => {
@@ -199,34 +200,20 @@ export class BoardDetailPage implements AfterViewInit {
       const card = this.cardById(cardId);
       const projectIdNum = parseId(this.projectId());
       const boardIdNum = parseId(this.boardId());
-      if (
-        card === null ||
-        projectIdNum === null ||
-        boardIdNum === null
-      ) {
+      if (card === null || projectIdNum === null || boardIdNum === null) {
         throw new Error('onCardDrop: missing card or route params');
       }
       // The target column id is carried on the drop container's `data` (set
       // via [cdkDropListData] in the template).
-      const targetContainer = event.container.data as
-        | { columnId: number }
-        | undefined;
+      const targetContainer = event.container.data as { columnId: number } | undefined;
       const targetColumnId = targetContainer?.columnId ?? card.column_id;
-      return this.writeApi.moveCard(
-        projectIdNum,
-        boardIdNum,
-        card.column_id,
-        card.id,
-        { target_column_id: targetColumnId },
-      );
+      return this.writeApi.moveCard(projectIdNum, boardIdNum, card.column_id, card.id, {
+        target_column_id: targetColumnId,
+      });
     },
     onSuccess: (card) => {
       this.store.applyCardMutation(card);
-      this.snackBar.open(
-        `Moved "${card.title}"`,
-        'Dismiss',
-        { duration: 2000 },
-      );
+      this.snackBar.open(`Moved "${card.title}"`, 'Dismiss', { duration: 2000 });
     },
     onError: (err) => {
       this.handleMoveError(err);
@@ -240,10 +227,7 @@ export class BoardDetailPage implements AfterViewInit {
    * the page's existing error UI.
    */
   private handleMoveError(err: ApiError): void {
-    if (
-      err.kind === 'validation' &&
-      err.code === 'position_exhausted'
-    ) {
+    if (err.kind === 'validation' && err.code === 'position_exhausted') {
       this.snackBar.open(
         'Card positions were refetched due to server-side index exhaustion.',
         'Dismiss',
@@ -265,11 +249,7 @@ export class BoardDetailPage implements AfterViewInit {
     // Synthetic error so the page renders the error state. We bypass the
     // store here because the route-level precondition failed before any
     // HTTP call would make sense.
-    this.snackBar.open(
-      'Board or project is missing or invalid.',
-      'Dismiss',
-      { duration: 4000 },
-    );
+    this.snackBar.open('Board or project is missing or invalid.', 'Dismiss', { duration: 4000 });
   }
 
   /**
@@ -293,15 +273,17 @@ export class BoardDetailPage implements AfterViewInit {
       columnId,
       triggerElement,
     };
-    const ref = this.dialog.open<
+    const ref = this.dialog.open<CardDetailDialog, CardDetailDialogData, CardDetailDialogResult>(
       CardDetailDialog,
-      CardDetailDialogData,
-      CardDetailDialogResult
-    >(CardDetailDialog, { data });
-    void ref.afterClosed().pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
-      // Return focus to the trigger element (WCAG AA focus management).
-      triggerElement.focus();
-    });
+      { data },
+    );
+    void ref
+      .afterClosed()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => {
+        // Return focus to the trigger element (WCAG AA focus management).
+        triggerElement.focus();
+      });
   }
 
   /**
@@ -320,11 +302,32 @@ export class BoardDetailPage implements AfterViewInit {
       boardId: boardIdNum,
       columnId,
     };
-    this.dialog.open<
+    this.dialog.open<CardEditorDialog, CardEditorDialogData, CardEditorDialogResult>(
       CardEditorDialog,
-      CardEditorDialogData,
-      CardEditorDialogResult
-    >(CardEditorDialog, { data });
+      { data },
+    );
+  }
+
+  /**
+   * Open the label manager dialog. The user can manage their label
+   * library (create / rename / recolor / delete) from here. The
+   * dialog returns focus to the trigger element on close.
+   *
+   * PR 1: this opens the dialog so the user can manage their library
+   * without card-level integration. PR 2 will also call this from the
+   * `CardDetailDialog` "Manage library" link and refresh the card
+   * cache when the dialog reports a delete.
+   */
+  protected openLabelManager(triggerElement: HTMLElement): void {
+    const data: LabelManagerDialogData = { triggerElement };
+    const ref = this.dialog.open<
+      LabelManagerDialog,
+      LabelManagerDialogData,
+      LabelManagerDialogResult
+    >(LabelManagerDialog, { data });
+    void firstValueFrom(ref.afterClosed()).then(() => {
+      triggerElement.focus();
+    });
   }
 
   protected cardsFor(columnId: number): readonly KanbanCard[] {

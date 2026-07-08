@@ -28,9 +28,12 @@ import { KanbanWriteApi } from '../../api/kanban-write.api';
 import { BoardsStore } from '../../stores/boards.store';
 import { CommentsStore } from '../../stores/comments.store';
 import { AttachmentsStore } from '../../stores/attachments.store';
-import type { KanbanCard } from '../../models';
+import { LabelsStore } from '../../stores/labels.store';
+import type { KanbanCard, KanbanLabel } from '../../models';
 import type { KanbanComment } from '../../models';
 import { MarkdownPipe } from '../../../../shared/pipes/markdown.pipe';
+import { CardLabelsStrip } from '../card-labels-strip/card-labels-strip';
+import { CardLabelsPicker } from '../card-labels-picker/card-labels-picker';
 import {
   BoardConflictDialog,
   type BoardConflictDialogData,
@@ -65,12 +68,7 @@ export interface CardDetailDialogData {
  * (or `'closed'` if the dialog was dismissed without taking an action).
  */
 export interface CardDetailDialogResult {
-  readonly action:
-    | 'closed'
-    | 'edited'
-    | 'archived'
-    | 'restored'
-    | 'deleted';
+  readonly action: 'closed' | 'edited' | 'archived' | 'restored' | 'deleted';
   readonly card?: KanbanCard;
 }
 
@@ -110,20 +108,30 @@ export interface CardDetailDialogResult {
     MatIconModule,
     MatProgressSpinnerModule,
     MarkdownPipe,
+    CardLabelsStrip,
+    CardLabelsPicker,
   ],
   template: `
-    <h2
-      #titleRef
-      mat-dialog-title
-      id="card-detail-title"
-      tabindex="-1"
-    >
+    <h2 #titleRef mat-dialog-title id="card-detail-title" tabindex="-1">
       {{ card().title }}
       @if (card().archived_at) {
         <span class="archived-chip">(archived)</span>
       }
     </h2>
     <mat-dialog-content [attr.aria-describedby]="'card-detail-body'">
+      <app-card-labels-strip class="labels-strip" [labels]="card().labels" [compact]="false" />
+
+      <section class="labels-picker" aria-labelledby="labels-picker-heading">
+        <h3 id="labels-picker-heading" class="visually-hidden">Apply labels</h3>
+        <app-card-labels-picker
+          #labelsPicker
+          [card]="card()"
+          [userLabels]="userLabels()"
+          (changed)="onLabelsChanged($event)"
+          (syncError)="onLabelsSyncError($event)"
+        />
+      </section>
+
       <div
         id="card-detail-body"
         class="card-body markdown-region"
@@ -145,7 +153,11 @@ export interface CardDetailDialogResult {
         <h3 id="comments-heading">Comments</h3>
         @if (commentsStore.loading()) {
           <p>
-            <mat-progress-spinner diameter="20" mode="indeterminate" aria-label="Loading comments"></mat-progress-spinner>
+            <mat-progress-spinner
+              diameter="20"
+              mode="indeterminate"
+              aria-label="Loading comments"
+            ></mat-progress-spinner>
             Loading comments…
           </p>
         }
@@ -159,18 +171,24 @@ export interface CardDetailDialogResult {
           @for (thread of commentsStore.threads(); track thread[0].id) {
             @for (comment of thread; track comment.id) {
               <li>
-                <article class="comment" role="article" [attr.aria-labelledby]="'comment-author-' + comment.id">
+                <article
+                  class="comment"
+                  role="article"
+                  [attr.aria-labelledby]="'comment-author-' + comment.id"
+                >
                   <header class="comment-header">
                     <span
                       class="author-chip"
                       [id]="'comment-author-' + comment.id"
                       [attr.aria-label]="'Author ' + comment.author_id"
-                    >User #{{ comment.author_id }}</span>
+                      >User #{{ comment.author_id }}</span
+                    >
                     <time
                       class="comment-time"
                       [attr.datetime]="comment.created_at"
                       [attr.aria-label]="'Created at ' + comment.created_at"
-                    >{{ comment.created_at | slice:0:10 }}</time>
+                      >{{ comment.created_at | slice: 0 : 10 }}</time
+                    >
                     @if (commentsStore.canEdit(comment)) {
                       <span class="edit-window" aria-label="Within edit window">· editable</span>
                     }
@@ -194,7 +212,9 @@ export interface CardDetailDialogResult {
                         type="button"
                         (click)="cancelEdit()"
                         aria-label="Cancel edit"
-                      >Cancel</button>
+                      >
+                        Cancel
+                      </button>
                       <button
                         mat-flat-button
                         color="primary"
@@ -202,7 +222,9 @@ export interface CardDetailDialogResult {
                         (click)="saveEdit(comment)"
                         [disabled]="savingEdit()"
                         aria-label="Save edit"
-                      >Save</button>
+                      >
+                        Save
+                      </button>
                     </div>
                   } @else {
                     <div class="comment-body markdown-region">
@@ -225,14 +247,20 @@ export interface CardDetailDialogResult {
                             type="button"
                             color="warn"
                             (click)="confirmDeleteComment(comment)"
-                            [attr.aria-label]="'Confirm delete comment by author ' + comment.author_id"
-                          >Delete (confirm)</button>
+                            [attr.aria-label]="
+                              'Confirm delete comment by author ' + comment.author_id
+                            "
+                          >
+                            Delete (confirm)
+                          </button>
                           <button
                             mat-button
                             type="button"
                             (click)="cancelDeleteComment()"
                             aria-label="Cancel delete"
-                          >Cancel</button>
+                          >
+                            Cancel
+                          </button>
                         } @else {
                           <button
                             mat-button
@@ -282,7 +310,9 @@ export interface CardDetailDialogResult {
               type="button"
               (click)="focusNewComment()"
               aria-label="Focus new comment input"
-            >Add comment</button>
+            >
+              Add comment
+            </button>
           </div>
         </form>
       </section>
@@ -292,7 +322,11 @@ export interface CardDetailDialogResult {
         <h3 id="attachments-heading">Attachments</h3>
         @if (attachmentsStore.loading()) {
           <p>
-            <mat-progress-spinner diameter="20" mode="indeterminate" aria-label="Loading attachments"></mat-progress-spinner>
+            <mat-progress-spinner
+              diameter="20"
+              mode="indeterminate"
+              aria-label="Loading attachments"
+            ></mat-progress-spinner>
             Loading attachments…
           </p>
         }
@@ -323,13 +357,17 @@ export interface CardDetailDialogResult {
                   color="warn"
                   (click)="confirmDeleteAttachment(att)"
                   [attr.aria-label]="'Confirm delete attachment ' + att.original_filename"
-                >Delete (confirm)</button>
+                >
+                  Delete (confirm)
+                </button>
                 <button
                   mat-button
                   type="button"
                   (click)="cancelDeleteAttachment()"
                   aria-label="Cancel delete"
-                >Cancel</button>
+                >
+                  Cancel
+                </button>
               } @else {
                 <button
                   mat-button
@@ -372,43 +410,22 @@ export interface CardDetailDialogResult {
       </section>
     </mat-dialog-content>
     <mat-dialog-actions align="end">
-      <button
-        mat-button
-        type="button"
-        (click)="edit()"
-        aria-label="Edit card"
-      >
+      <button mat-button type="button" (click)="edit()" aria-label="Edit card">
         <mat-icon aria-hidden="true">edit</mat-icon>
         Edit
       </button>
       @if (card().archived_at) {
-        <button
-          mat-button
-          type="button"
-          (click)="restore()"
-          aria-label="Restore card"
-        >
+        <button mat-button type="button" (click)="restore()" aria-label="Restore card">
           <mat-icon aria-hidden="true">unarchive</mat-icon>
           Restore
         </button>
       } @else {
-        <button
-          mat-button
-          type="button"
-          (click)="archive()"
-          aria-label="Archive card"
-        >
+        <button mat-button type="button" (click)="archive()" aria-label="Archive card">
           <mat-icon aria-hidden="true">archive</mat-icon>
           Archive
         </button>
       }
-      <button
-        mat-button
-        color="warn"
-        type="button"
-        (click)="delete()"
-        aria-label="Delete card"
-      >
+      <button mat-button color="warn" type="button" (click)="delete()" aria-label="Delete card">
         <mat-icon aria-hidden="true">delete</mat-icon>
         Delete
       </button>
@@ -416,53 +433,144 @@ export interface CardDetailDialogResult {
   `,
   styles: [
     `
-      .card-body { white-space: pre-wrap; }
+      .card-body {
+        white-space: pre-wrap;
+      }
       .markdown-region :is(h1, h2, h3, h4, h5, h6) {
         margin: 0.75em 0 0.25em;
         font-weight: 600;
       }
-      .markdown-region p { margin: 0.5em 0; }
-      .markdown-region ul, .markdown-region ol { margin: 0.5em 0; padding-left: 1.5em; }
-      .markdown-region code { background: rgba(0,0,0,0.06); padding: 0 0.25em; border-radius: 3px; }
+      .markdown-region p {
+        margin: 0.5em 0;
+      }
+      .markdown-region ul,
+      .markdown-region ol {
+        margin: 0.5em 0;
+        padding-left: 1.5em;
+      }
+      .markdown-region code {
+        background: rgba(0, 0, 0, 0.06);
+        padding: 0 0.25em;
+        border-radius: 3px;
+      }
       .markdown-region pre {
-        background: rgba(0,0,0,0.06);
+        background: rgba(0, 0, 0, 0.06);
         padding: 0.5em;
         border-radius: 3px;
         overflow-x: auto;
       }
-      .muted { color: rgba(0,0,0,0.5); }
-      .error { color: #b00020; }
-      .archived-chip { font-size: 0.85em; color: rgba(0,0,0,0.55); margin-left: 0.5em; }
-      .card-due { font-size: 0.9em; color: rgba(0,0,0,0.7); }
-      .comments, .attachments { margin-top: 1em; padding-top: 0.75em; border-top: 1px solid rgba(0,0,0,0.08); }
-      .comments h3, .attachments h3 { margin: 0 0 0.5em; font-size: 1em; }
-      .thread-list, .attachment-list { list-style: none; padding: 0; margin: 0 0 0.75em; }
-      .thread-list li + li, .attachment-list li + li { margin-top: 0.5em; }
+      .muted {
+        color: rgba(0, 0, 0, 0.5);
+      }
+      .error {
+        color: #b00020;
+      }
+      .archived-chip {
+        font-size: 0.85em;
+        color: rgba(0, 0, 0, 0.55);
+        margin-left: 0.5em;
+      }
+      .card-due {
+        font-size: 0.9em;
+        color: rgba(0, 0, 0, 0.7);
+      }
+      .comments,
+      .attachments {
+        margin-top: 1em;
+        padding-top: 0.75em;
+        border-top: 1px solid rgba(0, 0, 0, 0.08);
+      }
+      .comments h3,
+      .attachments h3 {
+        margin: 0 0 0.5em;
+        font-size: 1em;
+      }
+      .thread-list,
+      .attachment-list {
+        list-style: none;
+        padding: 0;
+        margin: 0 0 0.75em;
+      }
+      .thread-list li + li,
+      .attachment-list li + li {
+        margin-top: 0.5em;
+      }
       .comment {
-        background: rgba(0,0,0,0.03);
+        background: rgba(0, 0, 0, 0.03);
         border-radius: 4px;
         padding: 0.5em 0.75em;
       }
-      .comment-header { display: flex; gap: 0.5em; align-items: baseline; font-size: 0.85em; }
-      .author-chip { font-weight: 600; }
-      .comment-time { color: rgba(0,0,0,0.55); }
-      .edit-window { color: rgba(0,0,0,0.4); font-style: italic; }
-      .comment-body { padding: 0.25em 0; white-space: pre-wrap; }
-      .comment-edit { width: 100%; box-sizing: border-box; padding: 0.5em; }
-      .comment-actions { display: flex; gap: 0.5em; margin-top: 0.25em; }
-      .comment-form { margin-top: 0.75em; }
-      .comment-new { width: 100%; box-sizing: border-box; padding: 0.5em; }
-      .attachment { display: flex; gap: 0.5em; align-items: center; flex-wrap: wrap; }
-      .filename { font-weight: 500; }
-      .filesize, .mimetype { color: rgba(0,0,0,0.55); font-size: 0.85em; }
-      .attachment-upload { display: flex; gap: 0.5em; align-items: center; flex-wrap: wrap; }
-      .upload-hint { font-size: 0.8em; }
+      .comment-header {
+        display: flex;
+        gap: 0.5em;
+        align-items: baseline;
+        font-size: 0.85em;
+      }
+      .author-chip {
+        font-weight: 600;
+      }
+      .comment-time {
+        color: rgba(0, 0, 0, 0.55);
+      }
+      .edit-window {
+        color: rgba(0, 0, 0, 0.4);
+        font-style: italic;
+      }
+      .comment-body {
+        padding: 0.25em 0;
+        white-space: pre-wrap;
+      }
+      .comment-edit {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 0.5em;
+      }
+      .comment-actions {
+        display: flex;
+        gap: 0.5em;
+        margin-top: 0.25em;
+      }
+      .comment-form {
+        margin-top: 0.75em;
+      }
+      .comment-new {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 0.5em;
+      }
+      .attachment {
+        display: flex;
+        gap: 0.5em;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .filename {
+        font-weight: 500;
+      }
+      .filesize,
+      .mimetype {
+        color: rgba(0, 0, 0, 0.55);
+        font-size: 0.85em;
+      }
+      .attachment-upload {
+        display: flex;
+        gap: 0.5em;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .upload-hint {
+        font-size: 0.8em;
+      }
       .visually-hidden {
         position: absolute !important;
-        width: 1px; height: 1px;
-        padding: 0; margin: -1px;
-        overflow: hidden; clip: rect(0,0,0,0);
-        white-space: nowrap; border: 0;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
       }
     `,
   ],
@@ -480,27 +588,35 @@ export class CardDetailDialog implements OnInit {
   private readonly store = inject(BoardsStore);
   protected readonly commentsStore = inject(CommentsStore);
   protected readonly attachmentsStore = inject(AttachmentsStore);
+  protected readonly labelsStore = inject(LabelsStore);
   private readonly snackBar = inject(MatSnackBar);
   private readonly dialog = inject(MatDialog);
   private readonly router = inject(Router);
 
-  private readonly titleRef =
-    viewChild<ElementRef<HTMLElement>>('titleRef');
+  private readonly titleRef = viewChild<ElementRef<HTMLElement>>('titleRef');
   private readonly newCommentInputRef =
     viewChild<ElementRef<HTMLTextAreaElement>>('newCommentInput');
-  private readonly fileInputRef =
-    viewChild<ElementRef<HTMLInputElement>>('fileInput');
-  private readonly commentEditorRef =
-    viewChild<ElementRef<HTMLTextAreaElement>>('commentEditor');
+  private readonly fileInputRef = viewChild<ElementRef<HTMLInputElement>>('fileInput');
+  private readonly commentEditorRef = viewChild<ElementRef<HTMLTextAreaElement>>('commentEditor');
 
   /**
    * Local copy of the card; mutated on edit/archive/restore. The store
    * updates happen in parallel so other pages see the new resource.
    */
-  protected readonly card = computed(() => this.store.currentBoard()
-    ? findCardInBoard(this.store.currentBoard()!, this.data.card.id) ?? this.data.card
-    : this.data.card);
+  protected readonly card = computed(() =>
+    this.store.currentBoard()
+      ? (findCardInBoard(this.store.currentBoard()!, this.data.card.id) ?? this.data.card)
+      : this.data.card,
+  );
   protected readonly bodyText = computed(() => this.card().body ?? '(no body)');
+
+  /**
+   * The label library exposed to the picker. Empty when the user has
+   * no labels yet (the picker renders an empty state in that case).
+   */
+  protected readonly userLabels = computed<readonly KanbanLabel[]>(() => this.labelsStore.labels());
+
+  private readonly labelsPickerRef = viewChild<CardLabelsPicker>('labelsPicker');
 
   // --- Comment state ---
 
@@ -541,7 +657,7 @@ export class CardDetailDialog implements OnInit {
     // Ensure the store knows about the card even if it wasn't loaded
     // before. Idempotent.
     this.store.applyCardMutation(this.data.card);
-    // Load comments + attachments for this card.
+    // Load comments + attachments + labels for this card.
     void this.commentsStore.load(
       this.data.projectId,
       this.data.boardId,
@@ -554,24 +670,50 @@ export class CardDetailDialog implements OnInit {
       this.data.columnId,
       this.data.card.id,
     );
+    void this.labelsStore.ensureLoaded().then(() => {
+      const picker = this.labelsPickerRef();
+      if (picker) {
+        picker.setChain(this.data.projectId, this.data.boardId, this.data.columnId);
+      }
+    });
+  }
+
+  /**
+   * Commit the new card to the store after a successful labels sync.
+   * The server returned the canonical card with the synced label set;
+   * `BoardsStore.applyCardMutation` handles the cross-column detection
+   * (a sync never changes column, so this is effectively a within-
+   * column update).
+   */
+  protected onLabelsChanged(card: KanbanCard): void {
+    this.store.applyCardMutation(card);
+  }
+
+  /**
+   * The picker already surfaces a snackbar with the typed error; this
+   * hook exists so the dialog can react to other side effects (e.g.
+   * a future analytics ping). It MUST stay a no-op for the snackbar
+   * to avoid double-firing the user message.
+   */
+  protected onLabelsSyncError(_err: ApiError): void {
+    // Intentionally empty — the picker already opened the snackbar.
   }
 
   // --- Card actions ---
 
   protected async edit(): Promise<void> {
-    const ref = this.dialog.open<
+    const ref = this.dialog.open<CardEditorDialog, CardEditorDialogData, CardEditorDialogResult>(
       CardEditorDialog,
-      CardEditorDialogData,
-      CardEditorDialogResult
-    >(CardEditorDialog, {
-      data: {
-        mode: 'edit',
-        projectId: this.data.projectId,
-        boardId: this.data.boardId,
-        columnId: this.data.columnId,
-        card: this.card(),
+      {
+        data: {
+          mode: 'edit',
+          projectId: this.data.projectId,
+          boardId: this.data.boardId,
+          columnId: this.data.columnId,
+          card: this.card(),
+        },
       },
-    });
+    );
     const result = await firstValueFrom(ref.afterClosed());
     if (result?.action === 'saved' && result.card) {
       this.ref.close({ action: 'edited', card: result.card });
@@ -784,7 +926,10 @@ export class CardDetailDialog implements OnInit {
     this.confirmingAttachmentDeleteId.set(null);
   }
 
-  protected async confirmDeleteAttachment(att: { id: number; original_filename: string }): Promise<void> {
+  protected async confirmDeleteAttachment(att: {
+    id: number;
+    original_filename: string;
+  }): Promise<void> {
     if (this.confirmingAttachmentDeleteId() !== att.id) {
       return;
     }

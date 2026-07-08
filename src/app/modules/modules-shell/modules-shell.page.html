@@ -39,6 +39,46 @@
 
       <app-toolbar-project-picker class="shell-picker"></app-toolbar-project-picker>
 
+      <button
+        mat-icon-button
+        type="button"
+        class="shell-theme"
+        [matMenuTriggerFor]="themeMenu"
+        [attr.aria-label]="'Cambiar tema (actual: ' + themeMode() + ')'"
+        matTooltip="Tema"
+      >
+        <mat-icon>{{ themeIcon() }}</mat-icon>
+      </button>
+      <mat-menu #themeMenu="matMenu" xPosition="before">
+        <button
+          mat-menu-item
+          type="button"
+          (click)="setThemeMode('light')"
+          [class.theme-menu-active]="themeMode() === 'light'"
+        >
+          <mat-icon>light_mode</mat-icon>
+          <span>Claro</span>
+        </button>
+        <button
+          mat-menu-item
+          type="button"
+          (click)="setThemeMode('dark')"
+          [class.theme-menu-active]="themeMode() === 'dark'"
+        >
+          <mat-icon>dark_mode</mat-icon>
+          <span>Oscuro</span>
+        </button>
+        <button
+          mat-menu-item
+          type="button"
+          (click)="setThemeMode('system')"
+          [class.theme-menu-active]="themeMode() === 'system'"
+        >
+          <mat-icon>brightness_auto</mat-icon>
+          <span>Sistema</span>
+        </button>
+      </mat-menu>
+
       @if (user(); as currentUser) {
         <span class="shell-user" aria-label="Usuario autenticado">
           {{ currentUser.name }}

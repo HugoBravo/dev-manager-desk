@@ -1,10 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { effect } from '@angular/core';
 import { provideHttpClient } from '@angular/common/http';
-import {
-  HttpTestingController,
-  provideHttpClientTesting,
-} from '@angular/common/http/testing';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { provideRouter } from '@angular/router';
 import type { CdkDragDrop } from '@angular/cdk/drag-drop';
@@ -15,6 +12,7 @@ import { API_CONFIG } from '../../../core/config/api-config';
 import { KanbanApi } from '../api/kanban.api';
 import { KanbanWriteApi } from '../api/kanban-write.api';
 import { BoardsStore } from '../stores/boards.store';
+import { LabelsStore } from '../stores/labels.store';
 import { BoardDetailPage } from './board-detail.page';
 
 const API_BASE_URL = 'http://localhost:8000/api';
@@ -41,7 +39,12 @@ const sampleColumn = (id: number) => ({
   updated_at: '2026-01-01T00:00:00Z',
 });
 
-const sampleCard = (id: number, columnId: number, title = `Card ${id}`, body = null as string | null) => ({
+const sampleCard = (
+  id: number,
+  columnId: number,
+  title = `Card ${id}`,
+  body = null as string | null,
+) => ({
   id,
   column_id: columnId,
   title,
@@ -49,6 +52,7 @@ const sampleCard = (id: number, columnId: number, title = `Card ${id}`, body = n
   due_date: null,
   archived_at: null,
   position: 'k',
+  labels: [],
   created_at: '2026-01-01T00:00:00Z',
   updated_at: '2026-01-01T00:00:00Z',
 });
@@ -91,9 +95,7 @@ async function flushDetail(
   // empty) — flush unconditionally so httpMock.verify() at afterEach is
   // satisfied.
   httpMock
-    .expectOne(
-      `${FULL_PREFIX}/projects/${projectId}/kanban/boards/${boardId}/columns`,
-    )
+    .expectOne(`${FULL_PREFIX}/projects/${projectId}/kanban/boards/${boardId}/columns`)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .flush(paginated(columns) as any);
   for (const column of columns) {
@@ -112,12 +114,7 @@ describe('BoardDetailPage', () => {
     TestBed.resetTestingModule();
     window.localStorage.clear();
     await TestBed.configureTestingModule({
-      imports: [
-        BoardDetailPage,
-        MatDialogModule,
-        MatSnackBarModule,
-        NoopAnimationsModule,
-      ],
+      imports: [BoardDetailPage, MatDialogModule, MatSnackBarModule, NoopAnimationsModule],
       providers: [
         provideHttpClient(),
         provideHttpClientTesting(),
@@ -129,6 +126,7 @@ describe('BoardDetailPage', () => {
         KanbanApi,
         KanbanWriteApi,
         BoardsStore,
+        LabelsStore,
       ],
     }).compileComponents();
     // Silence snackbar dialogs in tests.
@@ -149,24 +147,15 @@ describe('BoardDetailPage', () => {
     const fixture = createComponent();
     const httpMock = TestBed.inject(HttpTestingController);
     const promise = fixture.whenStable();
-    await flushDetail(
-      httpMock,
-      7,
-      4,
-      sampleBoard(),
-      [sampleColumn(12), sampleColumn(13)],
-      {
-        12: [sampleCard(87, 12, 'Implement login form', 'a long body preview')],
-        13: [],
-      },
-    );
+    await flushDetail(httpMock, 7, 4, sampleBoard(), [sampleColumn(12), sampleColumn(13)], {
+      12: [sampleCard(87, 12, 'Implement login form', 'a long body preview')],
+      13: [],
+    });
     fixture.detectChanges();
     await promise;
 
     const host = fixture.nativeElement as HTMLElement;
-    expect(host.querySelector('.board-title')?.textContent).toContain(
-      'Sprint 42',
-    );
+    expect(host.querySelector('.board-title')?.textContent).toContain('Sprint 42');
     const cols = host.querySelectorAll('.column');
     expect(cols.length).toBe(2);
     expect(host.querySelectorAll('.card').length).toBe(1);
@@ -182,31 +171,20 @@ describe('BoardDetailPage', () => {
 
     const host = fixture.nativeElement as HTMLElement;
     expect(host.querySelector('.state-empty-board')).not.toBeNull();
-    expect(host.querySelector('.state-empty-board')?.textContent).toContain(
-      'no columns',
-    );
+    expect(host.querySelector('.state-empty-board')?.textContent).toContain('no columns');
   });
 
   it('renders a per-column empty state when the column has no cards', async () => {
     const fixture = createComponent();
     const httpMock = TestBed.inject(HttpTestingController);
     const promise = fixture.whenStable();
-    await flushDetail(
-      httpMock,
-      7,
-      4,
-      sampleBoard(),
-      [sampleColumn(12)],
-      { 12: [] },
-    );
+    await flushDetail(httpMock, 7, 4, sampleBoard(), [sampleColumn(12)], { 12: [] });
     fixture.detectChanges();
     await promise;
 
     const host = fixture.nativeElement as HTMLElement;
     expect(host.querySelector('.column-empty')).not.toBeNull();
-    expect(host.querySelector('.column-empty')?.textContent).toContain(
-      'No cards',
-    );
+    expect(host.querySelector('.column-empty')?.textContent).toContain('No cards');
   });
 
   it('renders the error state when the API fails', async () => {
@@ -218,9 +196,7 @@ describe('BoardDetailPage', () => {
     httpMock
       .expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4`)
       .flush({ message: 'gone' }, { status: 404, statusText: 'Not Found' });
-    httpMock.expectOne(
-      `${FULL_PREFIX}/projects/7/kanban/boards/4/columns`,
-    );
+    httpMock.expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4/columns`);
     await promise;
     await fixture.whenStable();
     fixture.detectChanges();
@@ -228,9 +204,7 @@ describe('BoardDetailPage', () => {
 
     const host = fixture.nativeElement as HTMLElement;
     expect(host.querySelector('[role="alert"]')).not.toBeNull();
-    expect(host.querySelector('[role="alert"]')?.textContent).toContain(
-      'Not found',
-    );
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain('Not found');
   });
 
   it('truncates long card bodies to a plain-text preview (no markdown)', async () => {
@@ -238,16 +212,9 @@ describe('BoardDetailPage', () => {
     const fixture = createComponent();
     const httpMock = TestBed.inject(HttpTestingController);
     const promise = fixture.whenStable();
-    await flushDetail(
-      httpMock,
-      7,
-      4,
-      sampleBoard(),
-      [sampleColumn(12)],
-      {
-        12: [sampleCard(87, 12, 'Long', longBody)],
-      },
-    );
+    await flushDetail(httpMock, 7, 4, sampleBoard(), [sampleColumn(12)], {
+      12: [sampleCard(87, 12, 'Long', longBody)],
+    });
     fixture.detectChanges();
     await promise;
 
@@ -269,14 +236,10 @@ describe('BoardDetailPage', () => {
     const moveBaseUrl = `${FULL_PREFIX}/projects/7/kanban/boards/4/columns/12/cards/87/move`;
 
     const promise = fixture.whenStable();
-    await flushDetail(
-      httpMock,
-      7,
-      4,
-      sampleBoard(),
-      [sampleColumn(12), sampleColumn(13)],
-      { 12: [sampleCard(87, 12, 'Implement login form')], 13: [] },
-    );
+    await flushDetail(httpMock, 7, 4, sampleBoard(), [sampleColumn(12), sampleColumn(13)], {
+      12: [sampleCard(87, 12, 'Implement login form')],
+      13: [],
+    });
     fixture.detectChanges();
     await promise;
     expect(store.cardsFor(12).map((c) => c.id)).toEqual([87]);
@@ -310,9 +273,11 @@ describe('BoardDetailPage', () => {
       dropPoint: { x: 0, y: 0 },
       event: new MouseEvent('mouseup'),
     } as CdkDragDrop<unknown, unknown, { columnId: number }>;
-    (fixture.componentInstance as unknown as {
-      onCardDrop: (e: typeof dropEvent) => void;
-    }).onCardDrop(dropEvent);
+    (
+      fixture.componentInstance as unknown as {
+        onCardDrop: (e: typeof dropEvent) => void;
+      }
+    ).onCardDrop(dropEvent);
 
     const moveReq = httpMock.expectOne(moveBaseUrl);
     expect(moveReq.request.method).toBe('POST');
@@ -320,7 +285,11 @@ describe('BoardDetailPage', () => {
 
     // 422 position_exhausted must surface through W3 so the page can branch.
     moveReq.flush(
-      { message: 'Server ran out of room to position items.', errors: {}, code: 'position_exhausted' },
+      {
+        message: 'Server ran out of room to position items.',
+        errors: {},
+        code: 'position_exhausted',
+      },
       { status: 422, statusText: 'Unprocessable Entity' },
     );
     await fixture.whenStable();
@@ -329,7 +298,9 @@ describe('BoardDetailPage', () => {
 
     // Page MUST refetch: board + columns + cards per column.
     const refetchBoardReq = httpMock.expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4`);
-    const refetchColumnsReq = httpMock.expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4/columns`);
+    const refetchColumnsReq = httpMock.expectOne(
+      `${FULL_PREFIX}/projects/7/kanban/boards/4/columns`,
+    );
     refetchBoardReq.flush(sampleBoard());
     refetchColumnsReq.flush(paginated([sampleColumn(12), sampleColumn(13)]));
     // Spin so the inner forkJoin (cards per column) sets up its HTTP.
@@ -338,12 +309,16 @@ describe('BoardDetailPage', () => {
       fixture.detectChanges();
     }
 
-    const refetchCardReqs = httpMock.match((req) =>
-      req.url.includes('/columns/') && req.url.endsWith('/cards'),
+    const refetchCardReqs = httpMock.match(
+      (req) => req.url.includes('/columns/') && req.url.endsWith('/cards'),
     );
     expect(refetchCardReqs.length).toBe(2);
-    const refetchCards12 = refetchCardReqs.find((r) => r.request.url.endsWith('/columns/12/cards'))!;
-    const refetchCards13 = refetchCardReqs.find((r) => r.request.url.endsWith('/columns/13/cards'))!;
+    const refetchCards12 = refetchCardReqs.find((r) =>
+      r.request.url.endsWith('/columns/12/cards'),
+    )!;
+    const refetchCards13 = refetchCardReqs.find((r) =>
+      r.request.url.endsWith('/columns/13/cards'),
+    )!;
 
     // CRITICAL: between the 422 and the refetch response, the card
     // cache must NOT have been mutated locally. If the page had

@@ -27,12 +27,7 @@
         <p>{{ statusMessage() }}</p>
       </mat-card-content>
       <mat-card-actions>
-        <button
-          mat-stroked-button
-          type="button"
-          (click)="retry()"
-          aria-label="Retry loading board"
-        >
+        <button mat-stroked-button type="button" (click)="retry()" aria-label="Retry loading board">
           Retry
         </button>
       </mat-card-actions>
@@ -50,6 +45,18 @@
       }
     </h1>
 
+    <div class="board-actions">
+      <button
+        mat-stroked-button
+        type="button"
+        (click)="openLabelManager($any($event.currentTarget))"
+        aria-label="Manage labels"
+      >
+        <mat-icon aria-hidden="true">label</mat-icon>
+        Manage labels
+      </button>
+    </div>
+
     @if (data.columns.length === 0) {
       <mat-card appearance="outlined" class="state-empty-board">
         <mat-card-header>
@@ -61,11 +68,7 @@
         </mat-card-content>
       </mat-card>
     } @else {
-      <div
-        class="columns-grid"
-        cdkDropListGroup
-        aria-label="Board columns"
-      >
+      <div class="columns-grid" cdkDropListGroup aria-label="Board columns">
         @for (column of data.columns; track column.id) {
           <section
             class="column"
@@ -94,6 +97,15 @@
                       (click)="openCard(card, $any($event.currentTarget))"
                       (keydown.enter)="openCard(card, $any($event.currentTarget))"
                     >
+                      @if (card.labels.length > 0) {
+                        <app-card-labels-strip
+                          class="card-labels"
+                          [labels]="card.labels"
+                          [compact]="true"
+                          [maxVisible]="5"
+                          [ariaHidden]="true"
+                        />
+                      }
                       <mat-card-header>
                         <mat-card-title>{{ card.title }}</mat-card-title>
                       </mat-card-header>

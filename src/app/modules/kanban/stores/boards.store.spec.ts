@@ -1,9 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
-import {
-  HttpTestingController,
-  provideHttpClientTesting,
-} from '@angular/common/http/testing';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 
 import { API_CONFIG } from '../../../core/config/api-config';
 import { KanbanApi } from '../api/kanban.api';
@@ -14,11 +11,7 @@ const API_BASE_URL = 'http://localhost:8000/api';
 const API_PREFIX = '/v1';
 const FULL_PREFIX = `${API_BASE_URL}${API_PREFIX}`;
 
-const sampleCard = (
-  id: number,
-  columnId: number,
-  position = 'k',
-): KanbanCard => ({
+const sampleCard = (id: number, columnId: number, position = 'k'): KanbanCard => ({
   id,
   column_id: columnId,
   title: `Card ${id}`,
@@ -26,6 +19,15 @@ const sampleCard = (
   due_date: null,
   archived_at: null,
   position,
+  labels: [],
+  created_at: '2026-01-01T00:00:00Z',
+  updated_at: '2026-01-01T00:00:00Z',
+});
+
+const sampleLabel = (id: number, name: string, color: string) => ({
+  id,
+  name,
+  color,
   created_at: '2026-01-01T00:00:00Z',
   updated_at: '2026-01-01T00:00:00Z',
 });
@@ -108,51 +110,45 @@ describe('BoardsStore', () => {
       created_at: '2026-01-01T00:00:00Z',
       updated_at: '2026-01-01T00:00:00Z',
     });
-    httpMock
-      .expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4/columns`)
-      .flush({
-        data: sampleDetail.columns,
-        links: { first: '', last: '', prev: null, next: null },
-        meta: {
-          current_page: 1,
-          from: 1,
-          last_page: 1,
-          per_page: 25,
-          to: 2,
-          total: 2,
-          path: '',
-        },
-      });
-    httpMock
-      .expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4/columns/12/cards`)
-      .flush({
-        data: sampleDetail.cardsByColumnId['12'],
-        links: { first: '', last: '', prev: null, next: null },
-        meta: {
-          current_page: 1,
-          from: 1,
-          last_page: 1,
-          per_page: 25,
-          to: 2,
-          total: 2,
-          path: '',
-        },
-      });
-    httpMock
-      .expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4/columns/15/cards`)
-      .flush({
-        data: sampleDetail.cardsByColumnId['15'],
-        links: { first: '', last: '', prev: null, next: null },
-        meta: {
-          current_page: 1,
-          from: 1,
-          last_page: 1,
-          per_page: 25,
-          to: 1,
-          total: 1,
-          path: '',
-        },
-      });
+    httpMock.expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4/columns`).flush({
+      data: sampleDetail.columns,
+      links: { first: '', last: '', prev: null, next: null },
+      meta: {
+        current_page: 1,
+        from: 1,
+        last_page: 1,
+        per_page: 25,
+        to: 2,
+        total: 2,
+        path: '',
+      },
+    });
+    httpMock.expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4/columns/12/cards`).flush({
+      data: sampleDetail.cardsByColumnId['12'],
+      links: { first: '', last: '', prev: null, next: null },
+      meta: {
+        current_page: 1,
+        from: 1,
+        last_page: 1,
+        per_page: 25,
+        to: 2,
+        total: 2,
+        path: '',
+      },
+    });
+    httpMock.expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4/columns/15/cards`).flush({
+      data: sampleDetail.cardsByColumnId['15'],
+      links: { first: '', last: '', prev: null, next: null },
+      meta: {
+        current_page: 1,
+        from: 1,
+        last_page: 1,
+        per_page: 25,
+        to: 1,
+        total: 1,
+        path: '',
+      },
+    });
 
     const detail = await promise;
     expect(detail).not.toBeNull();
@@ -166,54 +162,46 @@ describe('BoardsStore', () => {
       // Pre-load the store with the sample detail via a direct write.
       // We do this via `loadBoard()` (tested above) for realism.
       const promise = store.loadBoard(7, 4);
-      httpMock.expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4`).flush(
-        sampleDetail.board,
-      );
-      httpMock
-        .expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4/columns`)
-        .flush({
-          data: sampleDetail.columns,
-          links: { first: '', last: '', prev: null, next: null },
-          meta: {
-            current_page: 1,
-            from: 1,
-            last_page: 1,
-            per_page: 25,
-            to: 2,
-            total: 2,
-            path: '',
-          },
-        });
-      httpMock
-        .expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4/columns/12/cards`)
-        .flush({
-          data: sampleDetail.cardsByColumnId['12'],
-          links: { first: '', last: '', prev: null, next: null },
-          meta: {
-            current_page: 1,
-            from: 1,
-            last_page: 1,
-            per_page: 25,
-            to: 2,
-            total: 2,
-            path: '',
-          },
-        });
-      httpMock
-        .expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4/columns/15/cards`)
-        .flush({
-          data: sampleDetail.cardsByColumnId['15'],
-          links: { first: '', last: '', prev: null, next: null },
-          meta: {
-            current_page: 1,
-            from: 1,
-            last_page: 1,
-            per_page: 25,
-            to: 1,
-            total: 1,
-            path: '',
-          },
-        });
+      httpMock.expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4`).flush(sampleDetail.board);
+      httpMock.expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4/columns`).flush({
+        data: sampleDetail.columns,
+        links: { first: '', last: '', prev: null, next: null },
+        meta: {
+          current_page: 1,
+          from: 1,
+          last_page: 1,
+          per_page: 25,
+          to: 2,
+          total: 2,
+          path: '',
+        },
+      });
+      httpMock.expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4/columns/12/cards`).flush({
+        data: sampleDetail.cardsByColumnId['12'],
+        links: { first: '', last: '', prev: null, next: null },
+        meta: {
+          current_page: 1,
+          from: 1,
+          last_page: 1,
+          per_page: 25,
+          to: 2,
+          total: 2,
+          path: '',
+        },
+      });
+      httpMock.expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4/columns/15/cards`).flush({
+        data: sampleDetail.cardsByColumnId['15'],
+        links: { first: '', last: '', prev: null, next: null },
+        meta: {
+          current_page: 1,
+          from: 1,
+          last_page: 1,
+          per_page: 25,
+          to: 1,
+          total: 1,
+          path: '',
+        },
+      });
       await promise;
     });
 
@@ -251,56 +239,91 @@ describe('BoardsStore', () => {
     });
   });
 
+  it('pruneLabelFromCards() strips a label from every card that carried it', async () => {
+    const bug = sampleLabel(1, 'bug', '#ef4444');
+    const p1 = sampleLabel(2, 'p1', '#f59e0b');
+    // Seed a board whose cards carry the labels.
+    await loadSampleDetailWithLabels(store, httpMock, [
+      {
+        columnId: 12,
+        cards: [
+          { ...sampleCard(87, 12), labels: [bug, p1] },
+          { ...sampleCard(88, 12), labels: [bug] },
+        ],
+      },
+      { columnId: 15, cards: [{ ...sampleCard(89, 15), labels: [p1] }] },
+    ]);
+
+    store.pruneLabelFromCards(bug.id);
+
+    expect(store.cardsFor(12)[0]?.labels.map((l) => l.id)).toEqual([p1.id]);
+    expect(store.cardsFor(12)[1]?.labels).toEqual([]);
+    // Column 15's card did not carry `bug`; it must be untouched.
+    expect(store.cardsFor(15)[0]?.labels.map((l) => l.id)).toEqual([p1.id]);
+  });
+
+  it('pruneLabelFromCards() is a no-op when no card carried the label', async () => {
+    const bug = sampleLabel(1, 'bug', '#ef4444');
+    await loadSampleDetailWithLabels(store, httpMock, [
+      { columnId: 12, cards: [sampleCard(87, 12)] },
+    ]);
+
+    const before = JSON.stringify(store.currentBoard());
+    store.pruneLabelFromCards(bug.id);
+    const after = JSON.stringify(store.currentBoard());
+    expect(after).toBe(before);
+  });
+
+  it('pruneLabelFromCards() is a no-op when no board is loaded', () => {
+    // currentBoard is null before loadBoard is called.
+    expect(store.currentBoard()).toBeNull();
+    // No throw, no state change.
+    store.pruneLabelFromCards(99);
+    expect(store.currentBoard()).toBeNull();
+  });
+
   it('applyCardRemoved() drops the card from its column', async () => {
     const promise = store.loadBoard(7, 4);
-    httpMock.expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4`).flush(
-      sampleDetail.board,
-    );
-    httpMock
-      .expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4/columns`)
-      .flush({
-        data: sampleDetail.columns,
-        links: { first: '', last: '', prev: null, next: null },
-        meta: {
-          current_page: 1,
-          from: 1,
-          last_page: 1,
-          per_page: 25,
-          to: 2,
-          total: 2,
-          path: '',
-        },
-      });
-    httpMock
-      .expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4/columns/12/cards`)
-      .flush({
-        data: sampleDetail.cardsByColumnId['12'],
-        links: { first: '', last: '', prev: null, next: null },
-        meta: {
-          current_page: 1,
-          from: 1,
-          last_page: 1,
-          per_page: 25,
-          to: 2,
-          total: 2,
-          path: '',
-        },
-      });
-    httpMock
-      .expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4/columns/15/cards`)
-      .flush({
-        data: sampleDetail.cardsByColumnId['15'],
-        links: { first: '', last: '', prev: null, next: null },
-        meta: {
-          current_page: 1,
-          from: 1,
-          last_page: 1,
-          per_page: 25,
-          to: 1,
-          total: 1,
-          path: '',
-        },
-      });
+    httpMock.expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4`).flush(sampleDetail.board);
+    httpMock.expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4/columns`).flush({
+      data: sampleDetail.columns,
+      links: { first: '', last: '', prev: null, next: null },
+      meta: {
+        current_page: 1,
+        from: 1,
+        last_page: 1,
+        per_page: 25,
+        to: 2,
+        total: 2,
+        path: '',
+      },
+    });
+    httpMock.expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4/columns/12/cards`).flush({
+      data: sampleDetail.cardsByColumnId['12'],
+      links: { first: '', last: '', prev: null, next: null },
+      meta: {
+        current_page: 1,
+        from: 1,
+        last_page: 1,
+        per_page: 25,
+        to: 2,
+        total: 2,
+        path: '',
+      },
+    });
+    httpMock.expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4/columns/15/cards`).flush({
+      data: sampleDetail.cardsByColumnId['15'],
+      links: { first: '', last: '', prev: null, next: null },
+      meta: {
+        current_page: 1,
+        from: 1,
+        last_page: 1,
+        per_page: 25,
+        to: 1,
+        total: 1,
+        path: '',
+      },
+    });
     await promise;
 
     store.applyCardRemoved(87);
@@ -309,3 +332,50 @@ describe('BoardsStore', () => {
     expect(store.cardsFor(15).map((c) => c.id)).toEqual([89]);
   });
 });
+
+/**
+ * Helper used by the `pruneLabelFromCards()` tests. Drives the standard
+ * `loadBoard` flow with the given per-column card lists. Every column
+ * in `sampleDetail.columns` is flushed — columns not present in the
+ * `perColumn` argument are flushed with an empty card list. This
+ * mirrors the real `getBoardDetail` fan-out (one request per column).
+ */
+async function loadSampleDetailWithLabels(
+  s: BoardsStore,
+  mock: HttpTestingController,
+  perColumn: ReadonlyArray<{ columnId: number; cards: KanbanCard[] }>,
+): Promise<void> {
+  const cardsByColumnId = new Map(perColumn.map((p) => [p.columnId, p.cards]));
+  const promise = s.loadBoard(7, 4);
+  mock.expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4`).flush(sampleDetail.board);
+  mock.expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4/columns`).flush({
+    data: sampleDetail.columns,
+    links: { first: '', last: '', prev: null, next: null },
+    meta: {
+      current_page: 1,
+      from: 1,
+      last_page: 1,
+      per_page: 25,
+      to: 2,
+      total: 2,
+      path: '',
+    },
+  });
+  for (const column of sampleDetail.columns) {
+    const cards = cardsByColumnId.get(column.id) ?? [];
+    mock.expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4/columns/${column.id}/cards`).flush({
+      data: cards,
+      links: { first: '', last: '', prev: null, next: null },
+      meta: {
+        current_page: 1,
+        from: cards.length > 0 ? 1 : null,
+        last_page: 1,
+        per_page: 25,
+        to: cards.length > 0 ? cards.length : null,
+        total: cards.length,
+        path: '',
+      },
+    });
+  }
+  await promise;
+}

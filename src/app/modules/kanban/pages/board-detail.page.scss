@@ -69,6 +69,11 @@
   width: 100%;
 }
 
+.card-labels {
+  display: block;
+  margin-bottom: 8px;
+}
+
 .card-body {
   margin: 0;
   font: var(--mat-sys-body-small);

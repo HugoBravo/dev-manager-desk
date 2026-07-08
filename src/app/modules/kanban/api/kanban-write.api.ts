@@ -4,9 +4,9 @@ import { Observable } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
 
 import { API_CONFIG } from '../../../core/config/api-config';
-import type { KanbanCard } from '../models';
+import type { KanbanCard, KanbanLabel } from '../models';
 
-import { catchHttpError } from './kanban.api';
+import { catchHttpError, unwrapLaravelItem } from './kanban.api';
 
 /**
  * Payload for {@link KanbanWriteApi.createCard} (api-doc §7.3).
@@ -42,6 +42,36 @@ export interface MoveCardPayload {
 }
 
 /**
+ * Payload for {@link KanbanWriteApi.createLabel} (api-doc §10.2). Both
+ * fields are required; the backend validates the color against the
+ * `#RRGGBB` regex and enforces `name` uniqueness per user.
+ */
+export interface CreateLabelPayload {
+  readonly name: string;
+  readonly color: string;
+}
+
+/**
+ * Payload for {@link KanbanWriteApi.updateLabel} (api-doc §10.4). Both
+ * fields are optional — sending only `color` renames nothing, sending
+ * only `name` recolors nothing.
+ */
+export interface UpdateLabelPayload {
+  readonly name?: string;
+  readonly color?: string;
+}
+
+/**
+ * Payload for {@link KanbanWriteApi.syncCardLabels} (api-doc §10.6). The
+ * `label_ids` array REPLACES the card's current set; empty array clears
+ * all labels. Each id must belong to the authenticated user — cross-user
+ * ids fail server-side with 422.
+ */
+export interface SyncCardLabelsPayload {
+  readonly label_ids: readonly number[];
+}
+
+/**
  * Write API for cards. Endpoints match `dev-manager-backend/docs/kanban-api.md`
  * §7.3–§7.9 exactly. Every method pipes errors through
  * {@link catchHttpError} so the W3 wiring contract is preserved (PR2
@@ -67,11 +97,11 @@ export class KanbanWriteApi {
     payload: CreateCardPayload,
   ): Observable<KanbanCard> {
     return this.http
-      .post<KanbanCard>(
-        `${this.cardsBase(projectId, boardId, columnId)}/cards`,
-        payload,
-      )
-      .pipe(catchError((err: unknown) => catchHttpError(err)));
+      .post<KanbanCard>(`${this.cardsBase(projectId, boardId, columnId)}/cards`, payload)
+      .pipe(
+        map((raw) => unwrapLaravelItem<KanbanCard>(raw)),
+        catchError((err: unknown) => catchHttpError(err)),
+      );
   }
 
   /**
@@ -86,11 +116,11 @@ export class KanbanWriteApi {
     payload: UpdateCardPayload,
   ): Observable<KanbanCard> {
     return this.http
-      .patch<KanbanCard>(
-        `${this.cardsBase(projectId, boardId, columnId)}/cards/${cardId}`,
-        payload,
-      )
-      .pipe(catchError((err: unknown) => catchHttpError(err)));
+      .patch<KanbanCard>(`${this.cardsBase(projectId, boardId, columnId)}/cards/${cardId}`, payload)
+      .pipe(
+        map((raw) => unwrapLaravelItem<KanbanCard>(raw)),
+        catchError((err: unknown) => catchHttpError(err)),
+      );
   }
 
   /**
@@ -111,7 +141,10 @@ export class KanbanWriteApi {
         `${this.cardsBase(projectId, boardId, columnId)}/cards/${cardId}/move`,
         payload,
       )
-      .pipe(catchError((err: unknown) => catchHttpError(err)));
+      .pipe(
+        map((raw) => unwrapLaravelItem<KanbanCard>(raw)),
+        catchError((err: unknown) => catchHttpError(err)),
+      );
   }
 
   /**
@@ -129,7 +162,10 @@ export class KanbanWriteApi {
         `${this.cardsBase(projectId, boardId, columnId)}/cards/${cardId}/archive`,
         {},
       )
-      .pipe(catchError((err: unknown) => catchHttpError(err)));
+      .pipe(
+        map((raw) => unwrapLaravelItem<KanbanCard>(raw)),
+        catchError((err: unknown) => catchHttpError(err)),
+      );
   }
 
   /**
@@ -147,7 +183,10 @@ export class KanbanWriteApi {
         `${this.cardsBase(projectId, boardId, columnId)}/cards/${cardId}/restore`,
         {},
       )
-      .pipe(catchError((err: unknown) => catchHttpError(err)));
+      .pipe(
+        map((raw) => unwrapLaravelItem<KanbanCard>(raw)),
+        catchError((err: unknown) => catchHttpError(err)),
+      );
   }
 
   /**
@@ -166,21 +205,88 @@ export class KanbanWriteApi {
     cardId: number,
   ): Observable<void> {
     return this.http
-      .delete<void>(
-        `${this.cardsBase(projectId, boardId, columnId)}/cards/${cardId}`,
-      )
+      .delete<void>(`${this.cardsBase(projectId, boardId, columnId)}/cards/${cardId}`)
       .pipe(
         map(() => undefined),
         catchError((err: unknown) => catchHttpError(err)),
       );
   }
 
-  private cardsBase(
+  /**
+   * `POST /api/v1/kanban-labels` — create a new label for the
+   * authenticated user (api-doc §10.2). Returns 201 with the new
+   * {@link KanbanLabel}.
+   *
+   * Validation lives in the backend: 422 with field errors when `name`
+   * collides with another label owned by the same user, or when `color`
+   * does not match the `#RRGGBB` regex.
+   */
+  createLabel(payload: CreateLabelPayload): Observable<KanbanLabel> {
+    return this.http.post<KanbanLabel>(`${this.labelsBase()}/kanban-labels`, payload).pipe(
+      map((raw) => unwrapLaravelItem<KanbanLabel>(raw)),
+      catchError((err: unknown) => catchHttpError(err)),
+    );
+  }
+
+  /**
+   * `PATCH /api/v1/kanban-labels/{label}` — update an existing label
+   * (api-doc §10.4). Both payload fields are optional. Cross-user patch
+   * returns 404 (no existence leak).
+   */
+  updateLabel(labelId: number, payload: UpdateLabelPayload): Observable<KanbanLabel> {
+    return this.http
+      .patch<KanbanLabel>(`${this.labelsBase()}/kanban-labels/${labelId}`, payload)
+      .pipe(
+        map((raw) => unwrapLaravelItem<KanbanLabel>(raw)),
+        catchError((err: unknown) => catchHttpError(err)),
+      );
+  }
+
+  /**
+   * `DELETE /api/v1/kanban-labels/{label}` — hard-delete a label
+   * (api-doc §10.5). Returns 204. The pivot rows in `kanban_card_label`
+   * cascade server-side; the calling store MUST prune the label out of
+   * every cached card to avoid stale UI references.
+   */
+  deleteLabel(labelId: number): Observable<void> {
+    return this.http.delete<void>(`${this.labelsBase()}/kanban-labels/${labelId}`).pipe(
+      map(() => undefined),
+      catchError((err: unknown) => catchHttpError(err)),
+    );
+  }
+
+  /**
+   * `PUT /api/v1/projects/{p}/kanban/boards/{b}/columns/{c}/cards/{card}/labels`
+   * — sync the set of labels on a card (api-doc §10.6). Returns 200 with
+   * the updated {@link KanbanCard} including the new `labels` array. The
+   * caller is responsible for committing the card to the store via
+   * `BoardsStore.applyCardMutation()`.
+   */
+  syncCardLabels(
     projectId: number,
     boardId: number,
     columnId: number,
-  ): string {
+    cardId: number,
+    labelIds: readonly number[],
+  ): Observable<KanbanCard> {
+    const body: SyncCardLabelsPayload = { label_ids: [...labelIds] };
+    return this.http
+      .put<KanbanCard>(
+        `${this.cardsBase(projectId, boardId, columnId)}/cards/${cardId}/labels`,
+        body,
+      )
+      .pipe(
+        map((raw) => unwrapLaravelItem<KanbanCard>(raw)),
+        catchError((err: unknown) => catchHttpError(err)),
+      );
+  }
+
+  private cardsBase(projectId: number, boardId: number, columnId: number): string {
     const prefix = `${this.apiConfig.apiBaseUrl}/v1`;
     return `${prefix}/projects/${projectId}/kanban/boards/${boardId}/columns/${columnId}`;
+  }
+
+  private labelsBase(): string {
+    return `${this.apiConfig.apiBaseUrl}/v1`;
   }
 }

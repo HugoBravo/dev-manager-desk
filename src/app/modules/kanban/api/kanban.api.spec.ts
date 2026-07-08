@@ -1,10 +1,7 @@
 import { HttpErrorResponse, HttpHeaders } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
-import {
-  HttpTestingController,
-  provideHttpClientTesting,
-} from '@angular/common/http/testing';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 
 import { API_CONFIG } from '../../../core/config/api-config';
 import type { ApiError } from '../../../core/errors/api-error';
@@ -56,6 +53,14 @@ const sampleColumn = (id: number) => ({
   updated_at: '2026-01-01T00:00:00Z',
 });
 
+const sampleLabel = (id: number, name: string, color: string) => ({
+  id,
+  name,
+  color,
+  created_at: '2026-01-01T00:00:00Z',
+  updated_at: '2026-01-01T00:00:00Z',
+});
+
 const sampleCard = (id: number, columnId: number) => ({
   id,
   column_id: columnId,
@@ -64,6 +69,7 @@ const sampleCard = (id: number, columnId: number) => ({
   due_date: null,
   archived_at: null,
   position: 'k',
+  labels: [],
   created_at: '2026-01-01T00:00:00Z',
   updated_at: '2026-01-01T00:00:00Z',
 });
@@ -95,9 +101,7 @@ describe('KanbanApi', () => {
     it('GETs /projects/{id}/kanban/boards with no page param on the first page', async () => {
       const promise = api.listBoards(7).toPromise();
       const req = httpMock.expectOne(
-        (r) =>
-          r.method === 'GET' &&
-          r.url === `${FULL_PREFIX}/projects/7/kanban/boards`,
+        (r) => r.method === 'GET' && r.url === `${FULL_PREFIX}/projects/7/kanban/boards`,
       );
       expect(req.request.params.has('page')).toBe(false);
       req.flush(paginated([sampleBoard()]));
@@ -115,10 +119,7 @@ describe('KanbanApi', () => {
       const promise = api.listBoards(7).toPromise();
       httpMock
         .expectOne(`${FULL_PREFIX}/projects/7/kanban/boards`)
-        .flush(
-          { message: 'Not found' },
-          { status: 404, statusText: 'Not Found' },
-        );
+        .flush({ message: 'Not found' }, { status: 404, statusText: 'Not Found' });
       await expect(promise).rejects.toMatchObject({ kind: 'notFound' });
     });
   });
@@ -170,9 +171,7 @@ describe('KanbanApi', () => {
   describe('getBoardDetail()', () => {
     it('composes board + columns + cards into one BoardDetail', async () => {
       const promise = api.getBoardDetail(7, 4).toPromise();
-      httpMock
-        .expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4`)
-        .flush(sampleBoard());
+      httpMock.expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4`).flush(sampleBoard());
 
       httpMock
         .expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4/columns`)
@@ -218,9 +217,7 @@ describe('KanbanApi', () => {
 
     it('tolerates a column having no cards (empty list)', async () => {
       const promise = api.getBoardDetail(7, 4).toPromise();
-      httpMock
-        .expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4`)
-        .flush(sampleBoard());
+      httpMock.expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4`).flush(sampleBoard());
       httpMock
         .expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4/columns`)
         .flush(paginated([sampleColumn(12)]));
@@ -229,6 +226,53 @@ describe('KanbanApi', () => {
         .flush(paginated([]));
       const result = await promise;
       expect(result?.cardsByColumnId['12']).toEqual([]);
+    });
+  });
+
+  describe('listLabels()', () => {
+    it('GETs /kanban-labels with no page param on the first page', async () => {
+      const promise = api.listLabels().toPromise();
+      const req = httpMock.expectOne(
+        (r) => r.method === 'GET' && r.url === `${FULL_PREFIX}/kanban-labels`,
+      );
+      expect(req.request.params.has('page')).toBe(false);
+      req.flush(paginated([sampleLabel(4, 'bug', '#ef4444')]));
+      await expect(promise).resolves.toEqual([sampleLabel(4, 'bug', '#ef4444')]);
+    });
+
+    it('appends ?page=N when page > 1', async () => {
+      const promise = api.listLabels(2).toPromise();
+      const req = httpMock.expectOne(
+        (r) => r.params.get('page') === '2' && r.url === `${FULL_PREFIX}/kanban-labels`,
+      );
+      req.flush(paginated([]));
+      await expect(promise).resolves.toEqual([]);
+    });
+
+    it('surfaces 401 through the normalizer', async () => {
+      const promise = api.listLabels().toPromise();
+      httpMock
+        .expectOne(`${FULL_PREFIX}/kanban-labels`)
+        .flush({ message: 'Unauthenticated.' }, { status: 401, statusText: 'Unauthorized' });
+      await expect(promise).rejects.toMatchObject({ kind: 'unauthorized' });
+    });
+  });
+
+  describe('getLabel()', () => {
+    it('GETs /kanban-labels/{id} and unwraps the resource envelope', async () => {
+      const promise = api.getLabel(4).toPromise();
+      httpMock
+        .expectOne(`${FULL_PREFIX}/kanban-labels/4`)
+        .flush({ data: sampleLabel(4, 'bug', '#ef4444') });
+      await expect(promise).resolves.toEqual(sampleLabel(4, 'bug', '#ef4444'));
+    });
+
+    it('surfaces 404 cross-user through the normalizer', async () => {
+      const promise = api.getLabel(4).toPromise();
+      httpMock
+        .expectOne(`${FULL_PREFIX}/kanban-labels/4`)
+        .flush({ message: 'gone' }, { status: 404, statusText: 'Not Found' });
+      await expect(promise).rejects.toMatchObject({ kind: 'notFound' });
     });
   });
 

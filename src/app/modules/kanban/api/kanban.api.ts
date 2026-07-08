@@ -1,8 +1,4 @@
-import {
-  HttpClient,
-  HttpErrorResponse,
-  HttpParams,
-} from '@angular/common/http';
+import { HttpClient, HttpErrorResponse, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable, forkJoin, throwError } from 'rxjs';
 import { catchError, map, switchMap } from 'rxjs/operators';
@@ -11,12 +7,7 @@ import { API_CONFIG } from '../../../core/config/api-config';
 import { ErrorNormalizer } from '../../../core/errors/error-normalizer';
 import type { ApiError } from '../../../core/errors/api-error';
 
-import type {
-  Board,
-  BoardDetail,
-  KanbanCard,
-  KanbanColumn,
-} from '../models';
+import type { Board, BoardDetail, KanbanCard, KanbanColumn, KanbanLabel } from '../models';
 
 /**
  * Thin HttpClient wrapper around the kanban endpoints under
@@ -73,12 +64,10 @@ export class KanbanApi {
    * cards are fetched via the dedicated endpoints below.
    */
   getBoard(projectId: number, boardId: number): Observable<Board> {
-    return this.http
-      .get<unknown>(`${this.baseUrl(projectId)}/kanban/boards/${boardId}`)
-      .pipe(
-        map((raw) => unwrapLaravelItem<Board>(raw)),
-        catchError((err: unknown) => catchHttpError(err)),
-      );
+    return this.http.get<unknown>(`${this.baseUrl(projectId)}/kanban/boards/${boardId}`).pipe(
+      map((raw) => unwrapLaravelItem<Board>(raw)),
+      catchError((err: unknown) => catchHttpError(err)),
+    );
   }
 
   /**
@@ -88,9 +77,7 @@ export class KanbanApi {
    */
   listColumns(projectId: number, boardId: number): Observable<KanbanColumn[]> {
     return this.http
-      .get<unknown>(
-        `${this.baseUrl(projectId)}/kanban/boards/${boardId}/columns`,
-      )
+      .get<unknown>(`${this.baseUrl(projectId)}/kanban/boards/${boardId}/columns`)
       .pipe(
         map((raw) => unwrapLaravelItems<KanbanColumn>(raw)),
         catchError((err: unknown) => catchHttpError(err)),
@@ -102,15 +89,9 @@ export class KanbanApi {
    * — bare cards in a column (api-doc §7.1), ordered by position ASC.
    * Unwraps the Laravel per-resource envelope.
    */
-  listCards(
-    projectId: number,
-    boardId: number,
-    columnId: number,
-  ): Observable<KanbanCard[]> {
+  listCards(projectId: number, boardId: number, columnId: number): Observable<KanbanCard[]> {
     return this.http
-      .get<unknown>(
-        `${this.baseUrl(projectId)}/kanban/boards/${boardId}/columns/${columnId}/cards`,
-      )
+      .get<unknown>(`${this.baseUrl(projectId)}/kanban/boards/${boardId}/columns/${columnId}/cards`)
       .pipe(
         map((raw) => unwrapLaravelItems<KanbanCard>(raw)),
         catchError((err: unknown) => catchHttpError(err)),
@@ -140,13 +121,14 @@ export class KanbanApi {
           columns.map((column) =>
             this.listCards(projectId, boardId, column.id).pipe(
               map((cards) => ({ columnId: column.id, cards })),
-              catchError(() =>
-                // Card-level failure is non-fatal: empty list for that
-                // column. The page still renders the rest.
-                [[column.id, []] as const].slice(-1).map((entry) => ({
-                  columnId: column.id,
-                  cards: [] as KanbanCard[],
-                })) as never,
+              catchError(
+                () =>
+                  // Card-level failure is non-fatal: empty list for that
+                  // column. The page still renders the rest.
+                  [[column.id, []] as const].slice(-1).map((entry) => ({
+                    columnId: column.id,
+                    cards: [] as KanbanCard[],
+                  })) as never,
               ),
             ),
           ),
@@ -165,6 +147,36 @@ export class KanbanApi {
         columns,
         cardsByColumnId,
       })),
+    );
+  }
+
+  /**
+   * `GET /api/v1/kanban-labels?page=...` — paginated list of the
+   * authenticated user's labels ordered by name ASC (api-doc §10.1).
+   * Unwraps the Laravel per-resource envelope; returns a flat
+   * `KanbanLabel[]`.
+   */
+  listLabels(page = 1): Observable<KanbanLabel[]> {
+    const url = `${this.baseUrl()}/kanban-labels`;
+    return this.http
+      .get<unknown>(url, {
+        params: page > 1 ? new HttpParams().set('page', String(page)) : new HttpParams(),
+      })
+      .pipe(
+        map((raw) => unwrapLaravelItems<KanbanLabel>(raw)),
+        catchError((err: unknown) => catchHttpError(err)),
+      );
+  }
+
+  /**
+   * `GET /api/v1/kanban-labels/{label}` — bare label (api-doc §10.3).
+   * Cross-user fetch returns 404 (existence-leak guard); the typed
+   * `ApiError` lands in the `error` signal of the calling store.
+   */
+  getLabel(labelId: number): Observable<KanbanLabel> {
+    return this.http.get<unknown>(`${this.baseUrl()}/kanban-labels/${labelId}`).pipe(
+      map((raw) => unwrapLaravelItem<KanbanLabel>(raw)),
+      catchError((err: unknown) => catchHttpError(err)),
     );
   }
 
@@ -232,8 +244,11 @@ export function catchHttpError(err: unknown): Observable<never> {
     kind: 'network',
     status: 0,
     message:
-      err && typeof err === 'object' && 'message' in err && typeof (err as { message: unknown }).message === 'string'
-        ? ((err as { message: string }).message)
+      err &&
+      typeof err === 'object' &&
+      'message' in err &&
+      typeof (err as { message: unknown }).message === 'string'
+        ? (err as { message: string }).message
         : 'Could not reach the server. Check your connection and try again.',
   };
   return throwError(() => fallback);

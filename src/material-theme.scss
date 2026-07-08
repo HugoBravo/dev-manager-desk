@@ -10,6 +10,10 @@ html {
   @include mat.theme(
     (
       color: (
+        // `color-scheme` emits CSS `light-dark(light, dark)` tokens and lets
+        // the browser pick the active variant via the `color-scheme` property
+        // on this element. `ThemeService` toggles that property at runtime.
+        theme-type: color-scheme,
         primary: mat.$cyan-palette,
         tertiary: mat.$orange-palette,
       ),
@@ -20,11 +24,6 @@ html {
 }
 
 body {
-  // Default the application to a light color theme. This can be changed to
-  // `dark` to enable the dark color theme, or to `light dark` to defer to the
-  // user's system settings.
-  color-scheme: light;
-
   // Set a default background, font and text colors for the application using
   // Angular Material's system-level CSS variables. Learn more about these
   // variables at https://material.angular.dev/guide/system-variables

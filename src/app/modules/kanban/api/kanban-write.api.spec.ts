@@ -1,9 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
-import {
-  HttpTestingController,
-  provideHttpClientTesting,
-} from '@angular/common/http/testing';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 
 import { API_CONFIG } from '../../../core/config/api-config';
 import type { ApiError } from '../../../core/errors/api-error';
@@ -25,6 +22,7 @@ const sampleCard = (id = 87) => ({
   due_date: null,
   archived_at: null,
   position: 'k',
+  labels: [],
   created_at: '2026-01-01T00:00:00Z',
   updated_at: '2026-01-01T00:00:00Z',
 });
@@ -54,9 +52,7 @@ describe('KanbanWriteApi', () => {
 
   describe('createCard()', () => {
     it('POSTs to /columns/{c}/cards and returns the new card with server position', async () => {
-      const promise = api
-        .createCard(7, 4, 12, { title: 'New card', body: '## Hello' })
-        .toPromise();
+      const promise = api.createCard(7, 4, 12, { title: 'New card', body: '## Hello' }).toPromise();
       const req = httpMock.expectOne(cardsBase(7, 4, 12));
       expect(req.request.method).toBe('POST');
       expect(req.request.body).toEqual({ title: 'New card', body: '## Hello' });
@@ -65,18 +61,14 @@ describe('KanbanWriteApi', () => {
     });
 
     it('routes 422 field errors through the normalizer (W3 enforcement)', async () => {
-      const promise = api
-        .createCard(7, 4, 12, { title: '' })
-        .toPromise();
-      httpMock
-        .expectOne(cardsBase(7, 4, 12))
-        .flush(
-          {
-            message: 'The given data was invalid.',
-            errors: { title: ['The title field is required.'] },
-          },
-          { status: 422, statusText: 'Unprocessable Entity' },
-        );
+      const promise = api.createCard(7, 4, 12, { title: '' }).toPromise();
+      httpMock.expectOne(cardsBase(7, 4, 12)).flush(
+        {
+          message: 'The given data was invalid.',
+          errors: { title: ['The title field is required.'] },
+        },
+        { status: 422, statusText: 'Unprocessable Entity' },
+      );
       await expect(promise).rejects.toMatchObject({
         kind: 'validation',
         fieldErrors: { title: ['The title field is required.'] },
@@ -86,9 +78,7 @@ describe('KanbanWriteApi', () => {
 
   describe('updateCard()', () => {
     it('PATCHes /cards/{card} with the partial payload', async () => {
-      const promise = api
-        .updateCard(7, 4, 12, 87, { title: 'Renamed' })
-        .toPromise();
+      const promise = api.updateCard(7, 4, 12, 87, { title: 'Renamed' }).toPromise();
       const req = httpMock.expectOne(`${cardsBase(7, 4, 12)}/87`);
       expect(req.request.method).toBe('PATCH');
       expect(req.request.body).toEqual({ title: 'Renamed' });
@@ -99,9 +89,7 @@ describe('KanbanWriteApi', () => {
 
   describe('moveCard()', () => {
     it('POSTs /cards/{card}/move with target_column_id and returns server position', async () => {
-      const promise = api
-        .moveCard(7, 4, 12, 87, { target_column_id: 15 })
-        .toPromise();
+      const promise = api.moveCard(7, 4, 12, 87, { target_column_id: 15 }).toPromise();
       const req = httpMock.expectOne(`${cardsBase(7, 4, 12)}/87/move`);
       expect(req.request.method).toBe('POST');
       expect(req.request.body).toEqual({ target_column_id: 15 });
@@ -113,19 +101,15 @@ describe('KanbanWriteApi', () => {
     });
 
     it('routes 422 position_exhausted through the normalizer with code', async () => {
-      const promise = api
-        .moveCard(7, 4, 12, 87, { target_column_id: 15 })
-        .toPromise();
-      httpMock
-        .expectOne(`${cardsBase(7, 4, 12)}/87/move`)
-        .flush(
-          {
-            message: 'Server ran out of room to position items.',
-            errors: {},
-            code: 'position_exhausted',
-          },
-          { status: 422, statusText: 'Unprocessable Entity' },
-        );
+      const promise = api.moveCard(7, 4, 12, 87, { target_column_id: 15 }).toPromise();
+      httpMock.expectOne(`${cardsBase(7, 4, 12)}/87/move`).flush(
+        {
+          message: 'Server ran out of room to position items.',
+          errors: {},
+          code: 'position_exhausted',
+        },
+        { status: 422, statusText: 'Unprocessable Entity' },
+      );
       const captured = (await promise.catch((e: ApiError) => e)) as ApiError;
       expect(captured.kind).toBe('validation');
       if (captured.kind === 'validation') {
@@ -184,11 +168,109 @@ describe('KanbanWriteApi', () => {
       const promise = api.deleteCard(7, 4, 12, 87).toPromise();
       httpMock
         .expectOne(`${cardsBase(7, 4, 12)}/87`)
-        .flush(
-          { message: 'gone' },
-          { status: 404, statusText: 'Not Found' },
-        );
+        .flush({ message: 'gone' }, { status: 404, statusText: 'Not Found' });
       await expect(promise).rejects.toMatchObject({ kind: 'notFound' });
+    });
+  });
+
+  describe('label CRUD', () => {
+    const sampleLabel = (id = 4) => ({
+      id,
+      name: 'bug',
+      color: '#ef4444',
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    });
+
+    it('createLabel POSTs to /kanban-labels', async () => {
+      const promise = api.createLabel({ name: 'bug', color: '#ef4444' }).toPromise();
+      const req = httpMock.expectOne(`${FULL_PREFIX}/kanban-labels`);
+      expect(req.request.method).toBe('POST');
+      expect(req.request.body).toEqual({ name: 'bug', color: '#ef4444' });
+      req.flush(sampleLabel(4));
+      await expect(promise).resolves.toEqual(sampleLabel(4));
+    });
+
+    it('createLabel routes 422 duplicate-name through the normalizer with fieldErrors', async () => {
+      const promise = api.createLabel({ name: 'bug', color: '#ef4444' }).toPromise();
+      httpMock.expectOne(`${FULL_PREFIX}/kanban-labels`).flush(
+        {
+          message: 'The given data was invalid.',
+          errors: { name: ['The name has already been taken.'] },
+        },
+        { status: 422, statusText: 'Unprocessable Entity' },
+      );
+      await expect(promise).rejects.toMatchObject({
+        kind: 'validation',
+        fieldErrors: { name: ['The name has already been taken.'] },
+      });
+    });
+
+    it('updateLabel PATCHes /kanban-labels/{id} with the partial payload', async () => {
+      const promise = api.updateLabel(4, { color: '#10b981' }).toPromise();
+      const req = httpMock.expectOne(`${FULL_PREFIX}/kanban-labels/4`);
+      expect(req.request.method).toBe('PATCH');
+      expect(req.request.body).toEqual({ color: '#10b981' });
+      req.flush({ ...sampleLabel(4), color: '#10b981' });
+      await expect(promise).resolves.toMatchObject({ color: '#10b981' });
+    });
+
+    it('updateLabel routes 404 cross-user through the normalizer', async () => {
+      const promise = api.updateLabel(4, { name: 'taken' }).toPromise();
+      httpMock
+        .expectOne(`${FULL_PREFIX}/kanban-labels/4`)
+        .flush({ message: 'gone' }, { status: 404, statusText: 'Not Found' });
+      await expect(promise).rejects.toMatchObject({ kind: 'notFound' });
+    });
+
+    it('deleteLabel DELETEs /kanban-labels/{id} and returns void on 204', async () => {
+      const promise = api.deleteLabel(4).toPromise();
+      const req = httpMock.expectOne(`${FULL_PREFIX}/kanban-labels/4`);
+      expect(req.request.method).toBe('DELETE');
+      req.flush(null, { status: 204, statusText: 'No Content' });
+      await expect(promise).resolves.toBeUndefined();
+    });
+  });
+
+  describe('syncCardLabels()', () => {
+    it('PUTs /cards/{card}/labels with label_ids and returns the updated card', async () => {
+      const promise = api.syncCardLabels(7, 4, 12, 87, [4, 7]).toPromise();
+      const req = httpMock.expectOne(`${cardsBase(7, 4, 12)}/87/labels`);
+      expect(req.request.method).toBe('PUT');
+      expect(req.request.body).toEqual({ label_ids: [4, 7] });
+      req.flush({
+        ...sampleCard(),
+        labels: [
+          { id: 4, name: 'bug', color: '#ef4444', created_at: 'x', updated_at: 'x' },
+          { id: 7, name: 'p1', color: '#f59e0b', created_at: 'x', updated_at: 'x' },
+        ],
+      });
+      const result = await promise;
+      expect(result?.labels.length).toBe(2);
+      expect(result?.labels.map((l) => l.id)).toEqual([4, 7]);
+    });
+
+    it('sends an empty array when labelIds is empty (clears the card)', async () => {
+      const promise = api.syncCardLabels(7, 4, 12, 87, []).toPromise();
+      const req = httpMock.expectOne(`${cardsBase(7, 4, 12)}/87/labels`);
+      expect(req.request.body).toEqual({ label_ids: [] });
+      req.flush({ ...sampleCard(), labels: [] });
+      await expect(promise).resolves.toMatchObject({ labels: [] });
+    });
+
+    it('routes 422 cross-user label id through the normalizer with fieldErrors', async () => {
+      const promise = api.syncCardLabels(7, 4, 12, 87, [4, 999]).toPromise();
+      httpMock.expectOne(`${cardsBase(7, 4, 12)}/87/labels`).flush(
+        {
+          message: 'The given data was invalid.',
+          errors: { 'label_ids.1': ['The selected label_ids.1 is invalid.'] },
+        },
+        { status: 422, statusText: 'Unprocessable Entity' },
+      );
+      await expect(promise).rejects.toMatchObject({
+        kind: 'validation',
+        fieldErrors: { 'label_ids.1': ['The selected label_ids.1 is invalid.'] },
+      });
     });
   });
 });
