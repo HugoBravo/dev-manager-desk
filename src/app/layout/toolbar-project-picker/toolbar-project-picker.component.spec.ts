@@ -5,6 +5,7 @@ import {
   provideHttpClientTesting,
 } from '@angular/common/http/testing';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
+import { Router, provideRouter } from '@angular/router';
 
 import { API_CONFIG } from '../../core/config/api-config';
 import { ProjectService } from '../../core/projects/project.service';
@@ -38,6 +39,7 @@ describe('ToolbarProjectPickerComponent', () => {
       providers: [
         provideHttpClient(),
         provideHttpClientTesting(),
+        provideRouter([]),
         {
           provide: API_CONFIG,
           useValue: { apiBaseUrl: API_BASE_URL },
@@ -79,5 +81,64 @@ describe('ToolbarProjectPickerComponent', () => {
 
     service.setActive(service.projects()[0]!);
     expect(service.current()?.id).toBe(7);
+  });
+
+  it('navigates to the kanban boards list when a project is selected', async () => {
+    const service = TestBed.inject(ProjectService);
+    const httpMock = TestBed.inject(HttpTestingController);
+    const router = TestBed.inject(Router);
+    const navigateSpy = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+
+    const p = service.bootstrap();
+    httpMock.expectOne(projectsUrl).flush(
+      paginated([
+        {
+          id: 7,
+          name: 'Demo',
+          slug: 'demo',
+          owner_id: 1,
+          archived_at: null,
+          created_at: '',
+          updated_at: '',
+        },
+      ]),
+    );
+    await p;
+
+    const fixture = TestBed.createComponent(ToolbarProjectPickerComponent);
+    fixture.detectChanges();
+    const component = fixture.componentInstance as unknown as {
+      onSelectionChange: (id: number) => void;
+    };
+    component.onSelectionChange(7);
+
+    expect(service.current()?.id).toBe(7);
+    expect(navigateSpy).toHaveBeenCalledWith([
+      '/modules/kanban',
+      'projects',
+      7,
+      'boards',
+    ]);
+  });
+
+  it('does NOT navigate when the selection is cleared (null)', async () => {
+    const service = TestBed.inject(ProjectService);
+    const httpMock = TestBed.inject(HttpTestingController);
+    const router = TestBed.inject(Router);
+    const navigateSpy = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+
+    const p = service.bootstrap();
+    httpMock.expectOne(projectsUrl).flush(paginated([]));
+    await p;
+
+    const fixture = TestBed.createComponent(ToolbarProjectPickerComponent);
+    fixture.detectChanges();
+    const component = fixture.componentInstance as unknown as {
+      onSelectionChange: (id: number) => void;
+    };
+    component.onSelectionChange(-1); // no match -> project will be null
+
+    expect(service.current()).toBeNull();
+    expect(navigateSpy).not.toHaveBeenCalled();
   });
 });
