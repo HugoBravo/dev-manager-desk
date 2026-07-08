@@ -81,8 +81,7 @@ export class BoardsStore {
     this._loading.set('list');
     this._error.set(null);
     try {
-      const page = await firstValueFrom(this.api.listBoards(projectId));
-      const list = page.data;
+      const list = await firstValueFrom(this.api.listBoards(projectId));
       this._boards.set(list);
       return list;
     } catch (err) {

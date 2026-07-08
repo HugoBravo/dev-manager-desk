@@ -16,17 +16,21 @@ const API_BASE_URL = 'http://localhost:8000/api';
 const API_PREFIX = '/v1';
 const FULL_PREFIX = `${API_BASE_URL}${API_PREFIX}`;
 
-function paginated<T>(data: T[]) {
+/**
+ * Build a Laravel paginator response with JsonResource per row. Matches the
+ * real backend shape `{ data: [{ data: T }], links, meta }`.
+ */
+function paginated<T>(rows: T[]) {
   return {
-    data,
+    data: rows.map((row) => ({ data: row })),
     links: { first: '', last: '', prev: null, next: null },
     meta: {
       current_page: 1,
       from: 1,
       last_page: 1,
       per_page: 25,
-      to: data.length,
-      total: data.length,
+      to: rows.length,
+      total: rows.length,
       path: '',
     },
   };
@@ -87,37 +91,6 @@ describe('KanbanApi', () => {
 
   afterEach(() => httpMock.verify());
 
-  describe('listProjects()', () => {
-    it('GETs /projects and unwraps the paginated envelope', async () => {
-      const projects = [
-        {
-          id: 7,
-          name: 'Demo',
-          slug: 'demo',
-          owner_id: 1,
-          archived_at: null,
-          created_at: '2026-01-01T00:00:00Z',
-          updated_at: '2026-01-01T00:00:00Z',
-        },
-      ];
-      const promise = api.listProjects().toPromise();
-      const req = httpMock.expectOne(
-        (r) => r.method === 'GET' && r.url === `${FULL_PREFIX}/projects`,
-      );
-      req.flush(paginated(projects));
-      await expect(promise).resolves.toEqual(projects);
-    });
-
-    it('passes include_archived=1 when requested', async () => {
-      const promise = api.listProjects(true).toPromise();
-      const req = httpMock.expectOne(
-        (r) => r.method === 'GET' && r.params.get('include_archived') === '1',
-      );
-      req.flush(paginated([]));
-      await expect(promise).resolves.toEqual([]);
-    });
-  });
-
   describe('listBoards()', () => {
     it('GETs /projects/{id}/kanban/boards with no page param on the first page', async () => {
       const promise = api.listBoards(7).toPromise();
@@ -128,18 +101,14 @@ describe('KanbanApi', () => {
       );
       expect(req.request.params.has('page')).toBe(false);
       req.flush(paginated([sampleBoard()]));
-      await expect(promise).resolves.toEqual(
-        expect.objectContaining({ data: [expect.objectContaining({ id: 4 })] }),
-      );
+      await expect(promise).resolves.toEqual([sampleBoard()]);
     });
 
     it('appends ?page=N when page > 1', async () => {
       const promise = api.listBoards(7, 3).toPromise();
       const req = httpMock.expectOne((r) => r.params.get('page') === '3');
       req.flush(paginated([]));
-      await expect(promise).resolves.toEqual(
-        expect.objectContaining({ data: [] }),
-      );
+      await expect(promise).resolves.toEqual([]);
     });
 
     it('routes errors through catchHttpError (W3 enforcement)', async () => {
@@ -155,11 +124,11 @@ describe('KanbanApi', () => {
   });
 
   describe('getBoard()', () => {
-    it('GETs /projects/{id}/kanban/boards/{board}', async () => {
+    it('GETs /projects/{id}/kanban/boards/{board} and unwraps the resource envelope', async () => {
       const promise = api.getBoard(7, 4).toPromise();
       httpMock
         .expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4`)
-        .flush(sampleBoard());
+        .flush({ data: sampleBoard() });
       await expect(promise).resolves.toEqual(sampleBoard());
     });
 

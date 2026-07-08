@@ -108,8 +108,8 @@ export class BoardsListPage {
       .listBoards(projectId)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
-        next: (page) => {
-          this.store.boardsCache.set(page.data);
+        next: (boards) => {
+          this.store.boardsCache.set(boards);
           this.loading.set(false);
         },
         error: (err: unknown) => {

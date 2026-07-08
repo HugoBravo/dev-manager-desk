@@ -10,20 +10,27 @@ import { catchError, map, switchMap } from 'rxjs/operators';
 import { API_CONFIG } from '../../../core/config/api-config';
 import { ErrorNormalizer } from '../../../core/errors/error-normalizer';
 import type { ApiError } from '../../../core/errors/api-error';
-import type { Project } from '../../../core/projects/project.model';
 
 import type {
   Board,
   BoardDetail,
   KanbanCard,
   KanbanColumn,
-  Page,
 } from '../models';
 
 /**
  * Thin HttpClient wrapper around the kanban endpoints under
  * `/api/v1/projects/{project}/kanban/...`. Returns Observables; signal-backed
  * state lives in store classes.
+ *
+ * ## Laravel pagination envelope
+ *
+ * `GET` endpoints that return collections come back as
+ * `{ data: [{ data: T }], links, meta }` — Laravel's paginator wraps each
+ * resource in its own JsonResource envelope. The methods on this class UNWRAP
+ * the inner envelope so callers see a flat `T[]`. Page metadata (links, meta)
+ * is currently discarded; if pagination controls are needed later, the
+ * `unwrapLaravelPage` helper exposes the raw `meta` for callers.
  *
  * ## W3 enforcement (non-negotiable — see verify-report #134 obs / error-normalizer §F4)
  *
@@ -44,33 +51,20 @@ export class KanbanApi {
   private readonly apiConfig = inject(API_CONFIG);
 
   /**
-   * `GET /api/v1/projects` — the authenticated user's projects (paginated,
-   * archived filtered by default per api-doc §4.1).
-   */
-  listProjects(includeArchived = false): Observable<Project[]> {
-    let params = new HttpParams();
-    if (includeArchived) {
-      params = params.set('include_archived', '1');
-    }
-    return this.http
-      .get<Page<Project>>(`${this.baseUrl()}/projects`, { params })
-      .pipe(
-        map((page) => page.data as Project[]),
-        catchError((err: unknown) => catchHttpError(err)),
-      );
-  }
-
-  /**
    * `GET /api/v1/projects/{project}/kanban/boards?page=...` — paginated list of
-   * boards ordered by position ASC (api-doc §5.1).
+   * boards ordered by position ASC (api-doc §5.1). Unwraps the Laravel
+   * per-resource envelope; returns a flat `Board[]`.
    */
-  listBoards(projectId: number, page = 1): Observable<Page<Board>> {
+  listBoards(projectId: number, page = 1): Observable<Board[]> {
     const url = `${this.baseUrl(projectId)}/kanban/boards`;
     return this.http
-      .get<Page<Board>>(url, {
+      .get<unknown>(url, {
         params: page > 1 ? new HttpParams().set('page', String(page)) : new HttpParams(),
       })
-      .pipe(catchError((err: unknown) => catchHttpError(err)));
+      .pipe(
+        map((raw) => unwrapLaravelItems<Board>(raw)),
+        catchError((err: unknown) => catchHttpError(err)),
+      );
   }
 
   /**
@@ -80,21 +74,25 @@ export class KanbanApi {
    */
   getBoard(projectId: number, boardId: number): Observable<Board> {
     return this.http
-      .get<Board>(`${this.baseUrl(projectId)}/kanban/boards/${boardId}`)
-      .pipe(catchError((err: unknown) => catchHttpError(err)));
+      .get<unknown>(`${this.baseUrl(projectId)}/kanban/boards/${boardId}`)
+      .pipe(
+        map((raw) => unwrapLaravelItem<Board>(raw)),
+        catchError((err: unknown) => catchHttpError(err)),
+      );
   }
 
   /**
    * `GET /api/v1/projects/{project}/kanban/boards/{board}/columns` — bare
-   * columns for a board (api-doc §6.1), ordered by position ASC.
+   * columns for a board (api-doc §6.1), ordered by position ASC. Unwraps the
+   * Laravel per-resource envelope.
    */
-  listColumns(projectId: number, boardId: number): Observable<readonly KanbanColumn[]> {
+  listColumns(projectId: number, boardId: number): Observable<KanbanColumn[]> {
     return this.http
-      .get<Page<KanbanColumn>>(
+      .get<unknown>(
         `${this.baseUrl(projectId)}/kanban/boards/${boardId}/columns`,
       )
       .pipe(
-        map((page) => page.data),
+        map((raw) => unwrapLaravelItems<KanbanColumn>(raw)),
         catchError((err: unknown) => catchHttpError(err)),
       );
   }
@@ -102,18 +100,19 @@ export class KanbanApi {
   /**
    * `GET /api/v1/projects/{project}/kanban/boards/{board}/columns/{column}/cards`
    * — bare cards in a column (api-doc §7.1), ordered by position ASC.
+   * Unwraps the Laravel per-resource envelope.
    */
   listCards(
     projectId: number,
     boardId: number,
     columnId: number,
-  ): Observable<readonly KanbanCard[]> {
+  ): Observable<KanbanCard[]> {
     return this.http
-      .get<Page<KanbanCard>>(
+      .get<unknown>(
         `${this.baseUrl(projectId)}/kanban/boards/${boardId}/columns/${columnId}/cards`,
       )
       .pipe(
-        map((page) => page.data),
+        map((raw) => unwrapLaravelItems<KanbanCard>(raw)),
         catchError((err: unknown) => catchHttpError(err)),
       );
   }
@@ -176,6 +175,40 @@ export class KanbanApi {
     }
     return `${prefix}/projects/${projectId}`;
   }
+}
+
+/**
+ * Unwrap a Laravel paginator response that uses JsonResource per row:
+ *
+ *   { data: [{ data: T }, { data: T }, ...], links, meta }
+ *
+ * Returns a flat `T[]`. Throws if the envelope is malformed — that's a
+ * programmer error worth catching in tests, not silently returning `[]`.
+ */
+export function unwrapLaravelItems<T>(raw: unknown): T[] {
+  if (!raw || typeof raw !== 'object' || !('data' in raw)) {
+    throw new Error('KanbanApi: expected Laravel paginator envelope');
+  }
+  const outer = (raw as { data: unknown }).data;
+  if (!Array.isArray(outer)) {
+    throw new Error('KanbanApi: envelope.data must be an array');
+  }
+  return outer.map((wrapped) => unwrapLaravelItem<T>(wrapped));
+}
+
+/**
+ * Unwrap a single Laravel JsonResource envelope: `{ data: T }` → `T`.
+ * If `raw` is already a bare object (no inner `data` key), it's returned as-is
+ * — defensive against endpoints that bypass the resource wrapper.
+ */
+export function unwrapLaravelItem<T>(raw: unknown): T {
+  if (raw && typeof raw === 'object' && 'data' in raw) {
+    const inner = (raw as { data: unknown }).data;
+    if (inner && typeof inner === 'object') {
+      return inner as T;
+    }
+  }
+  return raw as T;
 }
 
 /**

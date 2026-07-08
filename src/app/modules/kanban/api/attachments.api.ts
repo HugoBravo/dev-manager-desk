@@ -4,7 +4,7 @@ import type { Observable } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
 
 import { API_CONFIG } from '../../../core/config/api-config';
-import { catchHttpError } from './kanban.api';
+import { catchHttpError, unwrapLaravelItems } from './kanban.api';
 
 import type { KanbanAttachment } from '../models';
 
@@ -69,9 +69,9 @@ export class AttachmentsApi {
   ): Observable<AttachmentList> {
     const url = `${this.baseUrl(projectId, boardId, columnId, cardId)}/attachments`;
     return this.http
-      .get<{ data: KanbanAttachment[] }>(url)
+      .get<unknown>(url)
       .pipe(
-        map((page) => page.data as AttachmentList),
+        map((raw) => unwrapLaravelItems<KanbanAttachment>(raw)),
         catchError((err: unknown) => catchHttpError(err)),
       );
   }

@@ -4,7 +4,7 @@ import type { Observable } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
 
 import { API_CONFIG } from '../../../core/config/api-config';
-import { catchHttpError } from './kanban.api';
+import { catchHttpError, unwrapLaravelItems } from './kanban.api';
 
 import type { KanbanComment } from '../models';
 
@@ -48,9 +48,9 @@ export class CommentsApi {
   ): Observable<CommentList> {
     const url = `${this.baseUrl(projectId, boardId, columnId, cardId)}/comments`;
     return this.http
-      .get<{ data: KanbanComment[] }>(url)
+      .get<unknown>(url)
       .pipe(
-        map((page) => page.data as CommentList),
+        map((raw) => unwrapLaravelItems<KanbanComment>(raw)),
         catchError((err: unknown) => catchHttpError(err)),
       );
   }
