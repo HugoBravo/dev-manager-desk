@@ -15,7 +15,9 @@ const API_PREFIX = '/v1';
 
 const projectsUrl = `${API_BASE_URL}${API_PREFIX}/projects`;
 const paginated = (data: unknown[]) => ({
-  data,
+  // Laravel paginator wraps each resource in its own `{ data: Project }`
+  // envelope (JsonResource default).
+  data: data.map((project) => ({ data: project })),
   links: { first: '', last: '', prev: null, next: null },
   meta: {
     current_page: 1,

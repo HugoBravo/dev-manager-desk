@@ -53,7 +53,10 @@ function configure(storedId: number | null = null, legacyId: number | null = nul
 }
 
 const paginated = (data: Project[]) => ({
-  data,
+  // Laravel paginator wraps each resource in its own `{ data: Project }`
+  // envelope (JsonResource default), so the outer `data` is an array of
+  // wrappers, not of bare projects. Matches the real API shape.
+  data: data.map((project) => ({ data: project })),
   links: { first: '', last: '', prev: null, next: null },
   meta: {
     current_page: 1,
