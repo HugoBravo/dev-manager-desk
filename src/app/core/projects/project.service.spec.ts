@@ -10,7 +10,7 @@ import { ProjectService } from './project.service';
 import type { Project } from './project.model';
 
 const API_BASE_URL = 'http://localhost:8000/api';
-const API_PREFIX = '/api/v1';
+const API_PREFIX = '/v1';
 const STORAGE_KEY = 'dev-manager-desk:project:selected';
 const LEGACY_STORAGE_KEY = 'dm:selectedProjectId';
 
@@ -42,7 +42,7 @@ function configure(storedId: number | null = null, legacyId: number | null = nul
       provideHttpClientTesting(),
       {
         provide: API_CONFIG,
-        useValue: { apiBaseUrl: API_BASE_URL, apiPrefix: API_PREFIX },
+        useValue: { apiBaseUrl: API_BASE_URL },
       },
     ],
   });

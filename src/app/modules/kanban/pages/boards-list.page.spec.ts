@@ -10,10 +10,11 @@ import { provideRouter } from '@angular/router';
 import { API_CONFIG } from '../../../core/config/api-config';
 import { ProjectService } from '../../../core/projects/project.service';
 import { KanbanApi } from '../api/kanban.api';
+import { BoardsStore } from '../stores/boards.store';
 import { BoardsListPage } from './boards-list.page';
 
 const API_BASE_URL = 'http://localhost:8000/api';
-const API_PREFIX = '/api/v1';
+const API_PREFIX = '/v1';
 const FULL_PREFIX = `${API_BASE_URL}${API_PREFIX}`;
 const BOARDS_URL = (projectId: number) =>
   `${FULL_PREFIX}/projects/${projectId}/kanban/boards`;
@@ -62,9 +63,10 @@ describe('BoardsListPage', () => {
         provideRouter([]),
         {
           provide: API_CONFIG,
-          useValue: { apiBaseUrl: API_BASE_URL, apiPrefix: API_PREFIX },
+          useValue: { apiBaseUrl: API_BASE_URL },
         },
         KanbanApi,
+        BoardsStore,
       ],
     }).compileComponents();
   });

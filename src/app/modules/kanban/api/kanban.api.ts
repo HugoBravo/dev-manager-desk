@@ -170,7 +170,7 @@ export class KanbanApi {
   }
 
   private baseUrl(projectId?: number): string {
-    const prefix = `${this.apiConfig.apiBaseUrl}${this.apiConfig.apiPrefix}`;
+    const prefix = `${this.apiConfig.apiBaseUrl}/v1`;
     if (projectId === undefined) {
       return `${prefix}`;
     }

@@ -1,0 +1,89 @@
+<h2 mat-dialog-title id="card-editor-title">{{ title() }}</h2>
+<mat-dialog-content>
+  <form
+    novalidate
+    (submit)="onSubmit($event)"
+    aria-labelledby="card-editor-title"
+    class="card-editor-form"
+  >
+    <mat-form-field appearance="outline">
+      <mat-label>Title</mat-label>
+      <input
+        matInput
+        type="text"
+        autocomplete="off"
+        [formField]="cardForm.title"
+        aria-describedby="title-errors"
+      />
+      @if (cardForm.title().errors().length > 0) {
+        <mat-error id="title-errors">
+          {{ cardForm.title().errors()[0].message }}
+        </mat-error>
+      }
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Body</mat-label>
+      <textarea
+        matInput
+        rows="6"
+        autocomplete="off"
+        [formField]="cardForm.body"
+        aria-describedby="body-errors"
+      ></textarea>
+      @if (cardForm.body().errors().length > 0) {
+        <mat-error id="body-errors">
+          {{ cardForm.body().errors()[0].message }}
+        </mat-error>
+      }
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Due date (YYYY-MM-DD)</mat-label>
+      <input
+        matInput
+        type="text"
+        placeholder="2026-12-31"
+        autocomplete="off"
+        [formField]="cardForm.due_date"
+        aria-describedby="due-errors"
+      />
+      @if (cardForm.due_date().errors().length > 0) {
+        <mat-error id="due-errors">
+          {{ cardForm.due_date().errors()[0].message }}
+        </mat-error>
+      }
+    </mat-form-field>
+
+    @if (generalError(); as message) {
+      <p class="card-editor-error" role="alert" aria-live="polite">
+        {{ message }}
+      </p>
+    }
+  </form>
+</mat-dialog-content>
+<mat-dialog-actions align="end">
+  <button
+    mat-button
+    type="button"
+    (click)="cancel()"
+    aria-label="Cancel"
+  >
+    Cancel
+  </button>
+  <button
+    mat-flat-button
+    color="primary"
+    type="submit"
+    [disabled]="cardForm().submitting() || cardForm().invalid()"
+    (click)="onSubmit($event)"
+    [attr.aria-label]="title()"
+  >
+    @if (cardForm().submitting()) {
+      <mat-spinner diameter="18"></mat-spinner>
+      <span>Saving...</span>
+    } @else {
+      <span>Save</span>
+    }
+  </button>
+</mat-dialog-actions>

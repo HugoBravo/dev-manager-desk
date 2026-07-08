@@ -1,0 +1,35 @@
+<h2 mat-dialog-title id="conflict-title">
+  <mat-icon aria-hidden="true">error_outline</mat-icon>
+  {{ titleText() }}
+</h2>
+<mat-dialog-content [attr.aria-describedby]="'conflict-desc'">
+  <p id="conflict-desc">{{ data.message }}</p>
+</mat-dialog-content>
+<mat-dialog-actions align="end">
+  <button
+    mat-button
+    type="button"
+    (click)="cancel()"
+    aria-label="Cancel"
+  >
+    Cancel
+  </button>
+  <button
+    mat-flat-button
+    color="primary"
+    type="button"
+    [disabled]="!data.navigateTarget"
+    (click)="open()"
+    [attr.aria-label]="
+      data.navigateTarget
+        ? 'Open ' + data.entityName
+        : 'Open disabled (no target known)'
+    "
+  >
+    @if (data.navigateTarget) {
+      Open {{ data.entityName }}
+    } @else {
+      Open (unavailable)
+    }
+  </button>
+</mat-dialog-actions>

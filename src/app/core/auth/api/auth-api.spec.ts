@@ -21,7 +21,7 @@ describe('AuthApi', () => {
       providers: [
         provideHttpClient(),
         provideHttpClientTesting(),
-        { provide: API_CONFIG, useValue: { apiBaseUrl: API_BASE_URL, apiPrefix: '/api/v1' } },
+        { provide: API_CONFIG, useValue: { apiBaseUrl: API_BASE_URL } },
       ],
     });
     api = TestBed.inject(AuthApi);

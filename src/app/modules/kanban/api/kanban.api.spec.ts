@@ -11,13 +11,9 @@ import type { ApiError } from '../../../core/errors/api-error';
 import { catchHttpError, KanbanApi } from './kanban.api';
 
 const API_BASE_URL = 'http://localhost:8000/api';
-const API_PREFIX = '/api/v1';
-// NOTE: The existing `ProjectsApi` composes URLs as
-// `${apiBaseUrl}${apiPrefix}/...`, which produces `.../api/api/v1/...` under
-// the current dev environment (where `apiBaseUrl` already ends in `/api`).
-// This is a known pre-existing mismatch flagged in PR1 verify-report S1
-// (orchestrator decision pending); PR2 mirrors the same composition so the
-// requests line up with the existing test expectations.
+// `apiBaseUrl` already ends in `/api`, so the v1 prefix is `/v1` (NOT
+// `/api/v1`). `FULL_PREFIX` is the real URL the runtime client produces.
+const API_PREFIX = '/v1';
 const FULL_PREFIX = `${API_BASE_URL}${API_PREFIX}`;
 
 function paginated<T>(data: T[]) {
@@ -80,7 +76,7 @@ describe('KanbanApi', () => {
         provideHttpClientTesting(),
         {
           provide: API_CONFIG,
-          useValue: { apiBaseUrl: API_BASE_URL, apiPrefix: API_PREFIX },
+          useValue: { apiBaseUrl: API_BASE_URL },
         },
         KanbanApi,
       ],

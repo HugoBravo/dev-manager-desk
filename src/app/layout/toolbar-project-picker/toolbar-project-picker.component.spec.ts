@@ -11,7 +11,7 @@ import { ProjectService } from '../../core/projects/project.service';
 import { ToolbarProjectPickerComponent } from './toolbar-project-picker.component';
 
 const API_BASE_URL = 'http://localhost:8000/api';
-const API_PREFIX = '/api/v1';
+const API_PREFIX = '/v1';
 
 const projectsUrl = `${API_BASE_URL}${API_PREFIX}/projects`;
 const paginated = (data: unknown[]) => ({
@@ -38,7 +38,7 @@ describe('ToolbarProjectPickerComponent', () => {
         provideHttpClientTesting(),
         {
           provide: API_CONFIG,
-          useValue: { apiBaseUrl: API_BASE_URL, apiPrefix: API_PREFIX },
+          useValue: { apiBaseUrl: API_BASE_URL },
         },
       ],
     }).compileComponents();

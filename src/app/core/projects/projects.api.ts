@@ -22,10 +22,9 @@ export class ProjectsApi {
       params = params.set('include_archived', '1');
     }
     return this.http
-      .get<Paginated<Project>>(
-        `${this.apiConfig.apiBaseUrl}${this.apiConfig.apiPrefix}/projects`,
-        { params },
-      )
+      .get<Paginated<Project>>(`${this.apiConfig.apiBaseUrl}/v1/projects`, {
+        params,
+      })
       .pipe(map((page) => page.data as Project[]));
   }
 }
