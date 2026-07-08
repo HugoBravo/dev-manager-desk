@@ -1,0 +1,148 @@
+:host {
+  display: block;
+  padding: 24px 16px;
+}
+
+.board-wrapper {
+  max-width: 1280px;
+  margin: 0 auto;
+}
+
+.board-title {
+  font: var(--mat-sys-headline-medium);
+  margin: 0 0 24px 0;
+  color: var(--mat-sys-on-surface);
+  outline: none; /* tabindex=-1 just for focus management */
+}
+
+.archived-chip {
+  font: var(--mat-sys-label-small);
+  color: var(--mat-sys-on-surface-variant);
+  margin-left: 8px;
+}
+
+.columns-grid {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  align-items: start;
+}
+
+.column {
+  background: var(--mat-sys-surface-container-lowest);
+  border-radius: 8px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 120px;
+}
+
+.column-heading {
+  font: var(--mat-sys-title-small);
+  margin: 0;
+  color: var(--mat-sys-on-surface-variant);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.column-empty {
+  font: var(--mat-sys-body-small);
+  color: var(--mat-sys-on-surface-variant);
+  margin: 0;
+  font-style: italic;
+}
+
+.cards-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.card {
+  width: 100%;
+}
+
+.card-body {
+  margin: 0;
+  font: var(--mat-sys-body-small);
+  color: var(--mat-sys-on-surface-variant);
+  /* Plain text only — markdown rendering is PR4. */
+}
+
+.state-loading,
+.state-error,
+.state-empty-board {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 48px 16px;
+}
+
+.state-text {
+  margin: 0;
+  font: var(--mat-sys-body-medium);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.state-empty-board,
+.state-error {
+  max-width: 480px;
+  margin: 32px auto;
+}
+
+/* Skeleton shimmer (CSS-only) */
+.skeleton-columns {
+  list-style: none;
+  padding: 0;
+  margin: 16px 0 0 0;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  width: 100%;
+}
+
+.skeleton-column {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.skeleton-bar,
+.skeleton-card {
+  background: linear-gradient(
+    90deg,
+    var(--mat-sys-surface-container-low) 0%,
+    var(--mat-sys-surface-container-high) 50%,
+    var(--mat-sys-surface-container-low) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: 4px;
+}
+
+.skeleton-bar {
+  height: 18px;
+  width: 70%;
+}
+
+.skeleton-card {
+  height: 64px;
+  width: 100%;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}

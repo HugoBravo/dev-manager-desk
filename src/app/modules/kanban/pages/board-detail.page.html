@@ -1,0 +1,104 @@
+<section class="board-wrapper" aria-live="polite" [attr.aria-busy]="isBusy()">
+  @if (loading()) {
+    <div class="state-loading" role="status" aria-live="polite">
+      <mat-progress-spinner
+        mode="indeterminate"
+        diameter="48"
+        aria-label="Loading board"
+      ></mat-progress-spinner>
+      <p class="state-text">Loading board</p>
+      <ul class="skeleton-columns" aria-hidden="true">
+        @for (_ of [1, 2, 3]; track $index) {
+          <li class="skeleton-column">
+            <div class="skeleton-bar"></div>
+            <div class="skeleton-card"></div>
+            <div class="skeleton-card"></div>
+          </li>
+        }
+      </ul>
+    </div>
+  } @else if (error(); as apiError) {
+    <mat-card appearance="outlined" class="state-error" role="alert">
+      <mat-card-header>
+        <mat-icon mat-card-avatar aria-hidden="true">error_outline</mat-icon>
+        <mat-card-title>Couldn't load board</mat-card-title>
+      </mat-card-header>
+      <mat-card-content>
+        <p>{{ statusMessage() }}</p>
+      </mat-card-content>
+      <mat-card-actions>
+        <button
+          mat-stroked-button
+          type="button"
+          (click)="retry()"
+          aria-label="Retry loading board"
+        >
+          Retry
+        </button>
+      </mat-card-actions>
+    </mat-card>
+  } @else if (detail(); as data) {
+    <h1
+      #boardTitle
+      class="board-title"
+      tabindex="-1"
+      [attr.aria-label]="'Board ' + data.board.name"
+    >
+      {{ data.board.name }}
+      @if (data.board.archived_at) {
+        <span class="archived-chip">(archived)</span>
+      }
+    </h1>
+
+    @if (data.columns.length === 0) {
+      <mat-card appearance="outlined" class="state-empty-board">
+        <mat-card-header>
+          <mat-icon mat-card-avatar aria-hidden="true">view_column</mat-icon>
+          <mat-card-title>This board has no columns</mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          <p>Create columns to start organizing cards.</p>
+        </mat-card-content>
+      </mat-card>
+    } @else {
+      <ol class="columns-grid" aria-label="Board columns">
+        @for (column of data.columns; track column.id) {
+          <li
+            class="column"
+            role="region"
+            [attr.aria-labelledby]="columnHeadingId(column.id)"
+          >
+            <h2 [id]="columnHeadingId(column.id)" class="column-heading">
+              {{ column.name }}
+            </h2>
+            @if (cardsFor(column.id).length === 0) {
+              <p class="column-empty">No cards in this column</p>
+            } @else {
+              <ul class="cards-list" aria-label="Cards in {{ column.name }}">
+                @for (card of cardsFor(column.id); track card.id) {
+                  <li>
+                    <mat-card
+                      appearance="outlined"
+                      class="card"
+                      tabindex="0"
+                      [attr.aria-label]="'Card ' + card.title"
+                    >
+                      <mat-card-header>
+                        <mat-card-title>{{ card.title }}</mat-card-title>
+                      </mat-card-header>
+                      @if (card.body) {
+                        <mat-card-content>
+                          <p class="card-body">{{ card.body }}</p>
+                        </mat-card-content>
+                      }
+                    </mat-card>
+                  </li>
+                }
+              </ul>
+            }
+          </li>
+        }
+      </ol>
+    }
+  }
+</section>
