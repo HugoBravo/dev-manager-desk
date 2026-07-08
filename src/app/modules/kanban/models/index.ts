@@ -10,10 +10,14 @@
 import type { Board } from './board.model';
 import type { KanbanColumn } from './column.model';
 import type { KanbanCard } from './card.model';
+import type { KanbanComment } from './comment.model';
+import type { KanbanAttachment } from './attachment.model';
 
 export type { Board } from './board.model';
 export type { KanbanColumn } from './column.model';
 export type { KanbanCard } from './card.model';
+export type { KanbanComment } from './comment.model';
+export type { KanbanAttachment } from './attachment.model';
 export type { Paginated, Page, PageMeta, PageLinks } from './pagination.model';
 export type { Project } from '../../../core/projects/project.model';
 
