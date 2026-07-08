@@ -40,11 +40,19 @@ export const appConfig: ApplicationConfig = {
     // Single boot path: hydrate the session AND the project list before the
     // router activates so the auth guard, the project picker, and any future
     // ProjectRequiredGuard never see a stale state.
-    provideAppInitializer(async () => {
+    //
+    // Both services MUST be injected in the same synchronous frame as the
+    // initializer registration. Once the function awaits, the injection context
+    // is lost and a second `inject()` call (e.g., for ProjectService after
+    // awaiting auth.bootstrap()) throws NG0203. Capture them up front and
+    // compose the bootstraps with Promise.all.
+    provideAppInitializer(() => {
       const auth = inject(AuthService);
-      await firstValueFrom(auth.bootstrap());
       const projects = inject(ProjectService);
-      await projects.bootstrap();
+      return Promise.all([
+        firstValueFrom(auth.bootstrap()),
+        projects.bootstrap(),
+      ]);
     }),
   ],
 };
