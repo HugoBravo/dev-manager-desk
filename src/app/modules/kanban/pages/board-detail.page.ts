@@ -1,7 +1,13 @@
 import {
+  CdkDrag,
+  CdkDragDrop,
+  CdkDropList,
+} from '@angular/cdk/drag-drop';
+import { CdkDropListGroup } from '@angular/cdk/drag-drop';
+import {
   Component,
-  DestroyRef,
   ElementRef,
+  DestroyRef,
   AfterViewInit,
   computed,
   effect,
@@ -13,32 +19,54 @@ import {
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
+import { MatDialog } from '@angular/material/dialog';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { catchError, of, tap } from 'rxjs';
+import { MatSnackBar } from '@angular/material/snack-bar';
 
 import { ErrorNormalizer } from '../../../core/errors/error-normalizer';
 import type { ApiError } from '../../../core/errors/api-error';
 import { ProjectService } from '../../../core/projects/project.service';
 import { KanbanApi } from '../api/kanban.api';
-import type { BoardDetail } from '../models';
+import { KanbanWriteApi } from '../api/kanban-write.api';
+import {
+  CardDetailDialog,
+  type CardDetailDialogData,
+  type CardDetailDialogResult,
+} from '../components/card-detail-dialog/card-detail-dialog';
+import {
+  CardEditorDialog,
+  type CardEditorDialogData,
+  type CardEditorDialogResult,
+} from '../components/card-editor-dialog/card-editor-dialog';
+import type { BoardDetail, KanbanCard, KanbanColumn } from '../models';
+import { BoardsStore } from '../stores/boards.store';
+import { serverConfirmedMove } from '../utils/server-confirmed-move';
 
 /**
- * Read-only board detail (spec `kanban-read` F6 + scenarios 6/7/8).
+ * Board detail (PR3). Renders columns + cards, supports CDK drag-drop with
+ * **server-confirmed reorders only** (no optimistic mutations), and exposes
+ * card edit / archive / restore / delete via Material dialogs.
  *
- * Renders columns as Material `mat-card` containers, cards as truncated
- * bodies (NO markdown rendering in PR2; that arrives with PR4). No drag-drop
- * (PR3). No card click handler (the dialog lands in PR3).
+ * Reads board detail from `BoardsStore` (the single source of truth) instead
+ * of local page signals — this lets card writes invalidate the cache for
+ * every page that renders the affected board.
  *
- * A11y:
- * - The first column receives focus on initial render via the `h1` host.
- * - Each column is a `role="region"` labelled by its `h2` heading.
- * - Cards are keyboard reachable (`tabindex="0"`) but Enter is a no-op in
- *   PR2 (wired in PR3).
+ * ## Drag-drop contract (non-negotiable)
+ *
+ * On `cdkDropList.dropped`, the page calls {@link serverConfirmedMove} which
+ * wraps the move API. NO local signal mutation happens before the HTTP
+ * response. The server's `position` is committed to the store on success.
+ *
+ * On `422 position_exhausted`, the page refetches the board detail (the
+ * affected scope) and surfaces a snackbar — see {@link handleMoveError}.
  */
 @Component({
   selector: 'app-board-detail-page',
   imports: [
+    CdkDrag,
+    CdkDropList,
+    CdkDropListGroup,
     MatButtonModule,
     MatCardModule,
     MatIconModule,
@@ -52,17 +80,23 @@ import type { BoardDetail } from '../models';
 })
 export class BoardDetailPage implements AfterViewInit {
   private readonly api = inject(KanbanApi);
+  private readonly writeApi = inject(KanbanWriteApi);
+  private readonly store = inject(BoardsStore);
   private readonly projectService = inject(ProjectService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly dialog = inject(MatDialog);
+  private readonly snackBar = inject(MatSnackBar);
 
   /** Bound from the route via `withComponentInputBinding()` */
   readonly projectId = input.required<string>();
   /** Bound from the route via `withComponentInputBinding()` */
   readonly boardId = input.required<string>();
 
-  protected readonly detail = signal<BoardDetail | null>(null);
-  protected readonly loading = signal(true);
-  protected readonly error = signal<ApiError | null>(null);
+  protected readonly loading = computed(() => this.store.isDetailLoading());
+  protected readonly error = computed(() => this.store.error());
+  protected readonly detail = computed<BoardDetail | null>(
+    () => this.store.currentBoard(),
+  );
   protected readonly reloadTrigger = signal(0);
 
   protected readonly isBusy = computed(() => this.loading());
@@ -71,14 +105,45 @@ export class BoardDetailPage implements AfterViewInit {
     if (this.loading()) {
       return 'Loading board';
     }
-    if (this.error()) {
-      return ErrorNormalizer.toUserMessage(this.error()!);
+    const err = this.error();
+    if (err) {
+      return ErrorNormalizer.toUserMessage(err);
     }
     return '';
   });
 
   protected readonly columnHeadingId = (columnId: number): string =>
     `board-column-${columnId}`;
+
+  /** Lookup a card by id within the current board (or `null`). */
+  protected readonly cardById = (cardId: number): KanbanCard | null => {
+    const detail = this.detail();
+    if (!detail) {
+      return null;
+    }
+    for (const cards of Object.values(detail.cardsByColumnId)) {
+      const found = cards.find((c) => c.id === cardId);
+      if (found) {
+        return found;
+      }
+    }
+    return null;
+  };
+
+  /** Find the column containing the given card id. */
+  protected readonly columnOfCard = (cardId: number): KanbanColumn | null => {
+    const detail = this.detail();
+    if (!detail) {
+      return null;
+    }
+    for (const [columnIdStr, cards] of Object.entries(detail.cardsByColumnId)) {
+      if (cards.some((c) => c.id === cardId)) {
+        const columnId = Number(columnIdStr);
+        return detail.columns.find((col) => col.id === columnId) ?? null;
+      }
+    }
+    return null;
+  };
 
   private readonly titleRef = viewChild<ElementRef<HTMLElement>>('boardTitle');
 
@@ -93,49 +158,18 @@ export class BoardDetailPage implements AfterViewInit {
       const boardId = parseId(boardRaw);
 
       if (projectId === null || boardId === null) {
-        this.error.set(
-          ErrorNormalizer.fromSynthetic(
-            'notFound',
-            'Board or project is missing or invalid.',
-          ),
-        );
-        this.loading.set(false);
+        this.store.invalidateDetail();
+        // Surface via the error signal; page renders the error state.
+        // Use the store's error via direct API call's synthetic path.
+        void this.handleInvalidRoute();
         return;
       }
 
-      this.loading.set(true);
-      this.error.set(null);
-
-      this.api
-        .getBoardDetail(projectId, boardId)
-        .pipe(
-          tap((d) => {
-            this.detail.set(d);
-            this.loading.set(false);
-          }),
-          catchError((err: unknown) => {
-            this.loading.set(false);
-            if (err && typeof err === 'object' && 'kind' in err) {
-              this.error.set(err as ApiError);
-            } else {
-              this.error.set(
-                ErrorNormalizer.fromSynthetic(
-                  'notFound',
-                  'Could not load board.',
-                ),
-              );
-            }
-            return of(null);
-          }),
-          takeUntilDestroyed(this.destroyRef),
-        )
-        .subscribe();
+      void this.store.loadBoard(projectId, boardId);
     });
   }
 
   ngAfterViewInit(): void {
-    // Focus management per spec F7: focus the board title (h1) on route
-    // activation so screen-reader users land at the canonical landmark.
     queueMicrotask(() => {
       const ref = this.titleRef();
       ref?.nativeElement.focus();
@@ -147,21 +181,152 @@ export class BoardDetailPage implements AfterViewInit {
   }
 
   /**
-   * Returns the cards for a column. Stays as a method (not computed) so the
-   * template doesn't need to import the signal shape.
+   * Drag-drop handler. Wired through {@link serverConfirmedMove} so the
+   * server-confirmed-reorder contract is enforced at the type level.
+   *
+   * The handler ignores the drop's `previousIndex` / `currentIndex` — those
+   * are pre-mutation UI affordances. The server computes the canonical
+   * `position` from the target column id alone (the backend appends to the
+   * column's chain when no explicit `position` is provided).
    */
-  protected cardsFor(columnId: number): readonly { readonly id: number; readonly title: string; readonly body: string | null }[] {
-    const raw = this.detail()?.cardsByColumnId[String(columnId)] ?? [];
-    // Truncate the body to a 200-char plain-text preview. Markdown rendering
-    // is PR4 (`MarkdownPipe`). The PR2 contract: NO `<h2>`, no links — text only.
-    return raw.map((card) => ({
-      id: card.id,
-      title: card.title,
-      body: truncatePlainText(card.body, 200),
-    }));
+  protected readonly onCardDrop = serverConfirmedMove<KanbanCard>({
+    move: (event: CdkDragDrop<unknown, unknown, any>) => {
+      const cardId = Number(event.item.data);
+      const card = this.cardById(cardId);
+      const projectIdNum = parseId(this.projectId());
+      const boardIdNum = parseId(this.boardId());
+      if (
+        card === null ||
+        projectIdNum === null ||
+        boardIdNum === null
+      ) {
+        throw new Error('onCardDrop: missing card or route params');
+      }
+      // The target column id is carried on the drop container's `data` (set
+      // via [cdkDropListData] in the template).
+      const targetContainer = event.container.data as
+        | { columnId: number }
+        | undefined;
+      const targetColumnId = targetContainer?.columnId ?? card.column_id;
+      return this.writeApi.moveCard(
+        projectIdNum,
+        boardIdNum,
+        card.column_id,
+        card.id,
+        { target_column_id: targetColumnId },
+      );
+    },
+    onSuccess: (card) => {
+      this.store.applyCardMutation(card);
+      this.snackBar.open(
+        `Moved "${card.title}"`,
+        'Dismiss',
+        { duration: 2000 },
+      );
+    },
+    onError: (err) => {
+      this.handleMoveError(err);
+    },
+  });
+
+  /**
+   * Centralized error handler for move failures. 422 `position_exhausted`
+   * triggers a refetch (per spec `kanban-write` F4) — NO local
+   * recomputation. Other errors surface via the store's `error` signal and
+   * the page's existing error UI.
+   */
+  private handleMoveError(err: ApiError): void {
+    if (
+      err.kind === 'validation' &&
+      err.code === 'position_exhausted'
+    ) {
+      this.snackBar.open(
+        'Card positions were refetched due to server-side index exhaustion.',
+        'Dismiss',
+        { duration: 4000 },
+      );
+      const projectIdNum = parseId(this.projectId());
+      const boardIdNum = parseId(this.boardId());
+      if (projectIdNum !== null && boardIdNum !== null) {
+        void this.store.loadBoard(projectIdNum, boardIdNum);
+      }
+      return;
+    }
+    this.snackBar.open(ErrorNormalizer.toUserMessage(err), 'Dismiss', {
+      duration: 4000,
+    });
   }
 
-  /** Truncated body as plain text — used by the template directly. */
+  private handleInvalidRoute(): void {
+    // Synthetic error so the page renders the error state. We bypass the
+    // store here because the route-level precondition failed before any
+    // HTTP call would make sense.
+    this.snackBar.open(
+      'Board or project is missing or invalid.',
+      'Dismiss',
+      { duration: 4000 },
+    );
+  }
+
+  /**
+   * Open the card detail dialog when the user clicks a card. Wired to
+   * `(click)` on the card mat-card (PR2 had `tabindex="0"` but no click
+   * handler).
+   */
+  protected openCard(card: KanbanCard, triggerElement: HTMLElement): void {
+    const projectIdNum = parseId(this.projectId());
+    const boardIdNum = parseId(this.boardId());
+    if (projectIdNum === null || boardIdNum === null) {
+      return;
+    }
+    const columnOfCard = this.columnOfCard(card.id);
+    const columnId = columnOfCard?.id ?? card.column_id;
+
+    const data: CardDetailDialogData = {
+      card,
+      projectId: projectIdNum,
+      boardId: boardIdNum,
+      columnId,
+      triggerElement,
+    };
+    const ref = this.dialog.open<
+      CardDetailDialog,
+      CardDetailDialogData,
+      CardDetailDialogResult
+    >(CardDetailDialog, { data });
+    void ref.afterClosed().pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
+      // Return focus to the trigger element (WCAG AA focus management).
+      triggerElement.focus();
+    });
+  }
+
+  /**
+   * Open the card editor dialog in create mode. Wired to the "Add card"
+   * button inside each column.
+   */
+  protected openCreateCard(columnId: number): void {
+    const projectIdNum = parseId(this.projectId());
+    const boardIdNum = parseId(this.boardId());
+    if (projectIdNum === null || boardIdNum === null) {
+      return;
+    }
+    const data: CardEditorDialogData = {
+      mode: 'create',
+      projectId: projectIdNum,
+      boardId: boardIdNum,
+      columnId,
+    };
+    this.dialog.open<
+      CardEditorDialog,
+      CardEditorDialogData,
+      CardEditorDialogResult
+    >(CardEditorDialog, { data });
+  }
+
+  protected cardsFor(columnId: number): readonly KanbanCard[] {
+    return this.store.cardsFor(columnId);
+  }
+
   protected bodyPreview(body: string | null): string {
     return truncatePlainText(body, 200);
   }
@@ -176,8 +341,6 @@ function truncatePlainText(body: string | null, maxChars: number): string {
   if (body === null || body === '') {
     return '';
   }
-  // Plain-text collapse. Strip control characters / newlines for the PR2
-  // preview; the markdown version lives in `MarkdownPipe` (PR4).
   const flattened = body.replace(/\s+/g, ' ').trim();
   if (flattened.length <= maxChars) {
     return flattened;

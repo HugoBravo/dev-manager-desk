@@ -10,6 +10,7 @@ import { provideRouter } from '@angular/router';
 import { API_CONFIG } from '../../../core/config/api-config';
 import { ProjectService } from '../../../core/projects/project.service';
 import { KanbanApi } from '../api/kanban.api';
+import { BoardsStore } from '../stores/boards.store';
 import { BoardsListPage } from './boards-list.page';
 
 const API_BASE_URL = 'http://localhost:8000/api';
@@ -65,6 +66,7 @@ describe('BoardsListPage', () => {
           useValue: { apiBaseUrl: API_BASE_URL, apiPrefix: API_PREFIX },
         },
         KanbanApi,
+        BoardsStore,
       ],
     }).compileComponents();
   });

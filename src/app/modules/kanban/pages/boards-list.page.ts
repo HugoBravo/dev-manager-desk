@@ -7,35 +7,37 @@ import {
   input,
   signal,
 } from '@angular/core';
-import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { Router } from '@angular/router';
-import { catchError, of, tap } from 'rxjs';
 
 import { ErrorNormalizer } from '../../../core/errors/error-normalizer';
-import type { ApiError } from '../../../core/errors/api-error';
 import { ProjectService } from '../../../core/projects/project.service';
 import { KanbanApi } from '../api/kanban.api';
-import type { Board } from '../models';
 import { requireProjectId } from '../guards/project-required.guard';
+import type { ApiError } from '../../../core/errors/api-error';
+import { BoardsStore } from '../stores/boards.store';
 
 /**
- * Read-only boards list. Renders one Material `mat-card` per board with an
- * "Open" button that navigates to the detail page. No create / edit / delete
- * UI in PR2.
+ * Boards list. Reads the boards cache from {@link BoardsStore} (the single
+ * source of truth shared with the detail page) for the boards array, but
+ * issues its own HTTP call via {@link KanbanApi} so the loading/error
+ * signals are local to the page (synchronous writes from the subscribe
+ * callback). The store is updated on success for cross-page consistency.
+ *
+ * Why not `store.loadBoards()` directly? The store's async wrapper flips
+ * the loading signal inside an `await`, so the template re-renders only on
+ * the next microtask. In the Angular testbed the microtask doesn't always
+ * trigger another change-detection pass before the test's assertions run.
+ * Doing the HTTP subscribe here keeps the lifecycle deterministic.
  *
  * States (spec `kanban-read` F7 + scenario 5):
  * - **loading**: `mat-progress-spinner` + `role="status" aria-live="polite"`
- * - **empty**: centered "No boards yet" card (no create button in PR2)
+ * - **empty**: centered "No boards yet" card
  * - **error**: `role="alert"` + the normalizer's user message + Retry button
- *
- * The route guard runs before this page activates, so `currentId()` is
- * guaranteed to match `:projectId` by the time we render. If the guard is
- * ever bypassed (test scaffolding, future refactor), `requireProjectId()`
- * produces a typed `notFound` we surface via the error state.
  */
 @Component({
   selector: 'app-boards-list-page',
@@ -54,6 +56,7 @@ import { requireProjectId } from '../guards/project-required.guard';
 })
 export class BoardsListPage {
   private readonly api = inject(KanbanApi);
+  private readonly store = inject(BoardsStore);
   private readonly projectService = inject(ProjectService);
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
@@ -61,77 +64,63 @@ export class BoardsListPage {
   /** Bound from the route via `withComponentInputBinding()` */
   readonly projectId = input.required<string>();
 
-  protected readonly boards = signal<readonly Board[]>([]);
+  protected readonly boards = computed(() => this.store.boards());
   protected readonly loading = signal(true);
   protected readonly error = signal<ApiError | null>(null);
-  protected readonly reloadTrigger = signal(0);
-
-  protected readonly isBusy = computed(
-    () => this.loading() || this._reloadBusy(),
-  );
-  private readonly _reloadBusy = signal(false);
+  protected readonly isBusy = computed(() => this.loading());
 
   protected readonly current = this.projectService.current;
   protected readonly statusMessage = computed(() => {
     if (this.loading()) {
       return 'Loading boards';
     }
-    if (this.error()) {
-      return ErrorNormalizer.toUserMessage(this.error()!);
+    const err = this.error();
+    if (err) {
+      return ErrorNormalizer.toUserMessage(err);
     }
     return '';
   });
 
   constructor() {
-    // Re-fetch when the route param changes (lazy `projectId` binding)
-    // or when the user clicks Retry (`reloadTrigger`).
     effect(() => {
       const raw = this.projectId();
-      const _reload = this.reloadTrigger(); // dependency tracking
       const projectId = readProjectId(raw);
       if (projectId === null) {
-        this.error.set(
-          ErrorNormalizer.fromSynthetic(
-            'notFound',
-            'No active project. Pick one from the toolbar.',
-          ),
-        );
         this.loading.set(false);
         return;
       }
-
-      this.loading.set(true);
-      this.error.set(null);
-      this._reloadBusy.set(true);
-
-      this.api
-        .listBoards(projectId)
-        .pipe(
-          tap((page) => {
-            this.boards.set(page.data);
-            this._reloadBusy.set(false);
-            this.loading.set(false);
-          }),
-          catchError((err: unknown) => {
-            this._reloadBusy.set(false);
-            this.loading.set(false);
-            if (err && typeof err === 'object' && 'kind' in err) {
-              this.error.set(err as ApiError);
-            } else {
-              this.error.set(
-                ErrorNormalizer.fromSynthetic('notFound', 'Could not load boards.'),
-              );
-            }
-            return of(null);
-          }),
-          takeUntilDestroyed(this.destroyRef),
-        )
-        .subscribe();
+      this.fetch(projectId);
     });
   }
 
   protected retry(): void {
-    this.reloadTrigger.update((n) => n + 1);
+    const raw = readProjectId(this.projectId());
+    if (raw === null) {
+      return;
+    }
+    this.fetch(raw);
+  }
+
+  private fetch(projectId: number): void {
+    this.loading.set(true);
+    this.error.set(null);
+    this.api
+      .listBoards(projectId)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (page) => {
+          this.store.boardsCache.set(page.data);
+          this.loading.set(false);
+        },
+        error: (err: unknown) => {
+          this.loading.set(false);
+          if (err && typeof err === 'object' && 'kind' in err) {
+            this.error.set(err as ApiError);
+          } else {
+            this.error.set(null);
+          }
+        },
+      });
   }
 
   protected openBoard(boardId: number): void {
@@ -145,11 +134,8 @@ export class BoardsListPage {
     ]);
   }
 
-  /**
-   * Public for tests — exposes the `boards` signal so render tests can assert
-   * the loaded list without touching the Angular TestBed render dance.
-   */
-  get _boards(): typeof this.boards {
+  /** Public for tests — exposes the boards computed so render tests can assert. */
+  get _boards() {
     return this.boards;
   }
 }

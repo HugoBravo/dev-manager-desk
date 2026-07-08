@@ -61,12 +61,19 @@
         </mat-card-content>
       </mat-card>
     } @else {
-      <ol class="columns-grid" aria-label="Board columns">
+      <div
+        class="columns-grid"
+        cdkDropListGroup
+        aria-label="Board columns"
+      >
         @for (column of data.columns; track column.id) {
-          <li
+          <section
             class="column"
             role="region"
             [attr.aria-labelledby]="columnHeadingId(column.id)"
+            cdkDropList
+            [cdkDropListData]="{ columnId: column.id }"
+            (cdkDropListDropped)="onCardDrop($any($event))"
           >
             <h2 [id]="columnHeadingId(column.id)" class="column-heading">
               {{ column.name }}
@@ -81,14 +88,18 @@
                       appearance="outlined"
                       class="card"
                       tabindex="0"
+                      cdkDrag
+                      [cdkDragData]="card.id"
                       [attr.aria-label]="'Card ' + card.title"
+                      (click)="openCard(card, $any($event.currentTarget))"
+                      (keydown.enter)="openCard(card, $any($event.currentTarget))"
                     >
                       <mat-card-header>
                         <mat-card-title>{{ card.title }}</mat-card-title>
                       </mat-card-header>
                       @if (card.body) {
                         <mat-card-content>
-                          <p class="card-body">{{ card.body }}</p>
+                          <p class="card-body">{{ bodyPreview(card.body) }}</p>
                         </mat-card-content>
                       }
                     </mat-card>
@@ -96,9 +107,19 @@
                 }
               </ul>
             }
-          </li>
+            <button
+              mat-stroked-button
+              type="button"
+              class="add-card-button"
+              (click)="openCreateCard(column.id)"
+              [attr.aria-label]="'Add card to ' + column.name"
+            >
+              <mat-icon aria-hidden="true">add</mat-icon>
+              Add card
+            </button>
+          </section>
         }
-      </ol>
+      </div>
     }
   }
 </section>

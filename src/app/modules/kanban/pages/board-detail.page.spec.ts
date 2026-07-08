@@ -6,9 +6,13 @@ import {
 } from '@angular/common/http/testing';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { provideRouter } from '@angular/router';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 
 import { API_CONFIG } from '../../../core/config/api-config';
 import { KanbanApi } from '../api/kanban.api';
+import { KanbanWriteApi } from '../api/kanban-write.api';
+import { BoardsStore } from '../stores/boards.store';
 import { BoardDetailPage } from './board-detail.page';
 
 const API_BASE_URL = 'http://localhost:8000/api';
@@ -106,7 +110,12 @@ describe('BoardDetailPage', () => {
     TestBed.resetTestingModule();
     window.localStorage.clear();
     await TestBed.configureTestingModule({
-      imports: [BoardDetailPage, NoopAnimationsModule],
+      imports: [
+        BoardDetailPage,
+        MatDialogModule,
+        MatSnackBarModule,
+        NoopAnimationsModule,
+      ],
       providers: [
         provideHttpClient(),
         provideHttpClientTesting(),
@@ -116,8 +125,13 @@ describe('BoardDetailPage', () => {
           useValue: { apiBaseUrl: API_BASE_URL, apiPrefix: API_PREFIX },
         },
         KanbanApi,
+        KanbanWriteApi,
+        BoardsStore,
       ],
     }).compileComponents();
+    // Silence snackbar dialogs in tests.
+    TestBed.inject(MatSnackBar);
+    TestBed.inject(MatDialog);
   });
 
   afterEach(() => window.localStorage.clear());
@@ -205,8 +219,10 @@ describe('BoardDetailPage', () => {
     httpMock.expectOne(
       `${FULL_PREFIX}/projects/7/kanban/boards/4/columns`,
     );
-    fixture.detectChanges();
     await promise;
+    await fixture.whenStable();
+    fixture.detectChanges();
+    await fixture.whenStable();
 
     const host = fixture.nativeElement as HTMLElement;
     expect(host.querySelector('[role="alert"]')).not.toBeNull();
