@@ -15,6 +15,7 @@ import { MatToolbarModule } from '@angular/material/toolbar';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 
 import { AuthService } from '../../core/auth/auth.service';
+import { ToolbarProjectPickerComponent } from '../../layout/toolbar-project-picker/toolbar-project-picker.component';
 
 @Component({
   selector: 'app-modules-shell',
@@ -27,6 +28,7 @@ import { AuthService } from '../../core/auth/auth.service';
     RouterLink,
     RouterLinkActive,
     RouterOutlet,
+    ToolbarProjectPickerComponent,
   ],
   templateUrl: './modules-shell.page.html',
   styleUrl: './modules-shell.page.scss',

@@ -1,7 +1,14 @@
-import { Component } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 
+import { ProjectService } from '../../core/projects/project.service';
+
+/**
+ * Index page for the kanban module. Renders the placeholder card the project
+ * picker will replace in PR2/PR3. When no project is selected, the body tells
+ * the user to pick one from the toolbar.
+ */
 @Component({
   selector: 'app-kanban-page',
   imports: [MatCardModule, MatIconModule],
@@ -36,4 +43,7 @@ import { MatIconModule } from '@angular/material/icon';
     `,
   ],
 })
-export class KanbanPage {}
+export class KanbanPage {
+  private readonly projectService = inject(ProjectService);
+  protected readonly current = this.projectService.current;
+}
