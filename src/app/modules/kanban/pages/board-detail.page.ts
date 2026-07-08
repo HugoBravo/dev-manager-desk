@@ -97,6 +97,10 @@ export class BoardDetailPage implements AfterViewInit {
   protected readonly detail = computed<BoardDetail | null>(
     () => this.store.currentBoard(),
   );
+  // Reactive accessor for the cards-by-column map. Templates must read this
+  // signal directly (not via the plain `cardsFor()` function) so change
+  // detection re-runs after a mutation (create / archive / restore / move).
+  protected readonly cardsByColumn = this.store.cardsByColumn;
   protected readonly reloadTrigger = signal(0);
 
   protected readonly isBusy = computed(() => this.loading());
@@ -324,7 +328,10 @@ export class BoardDetailPage implements AfterViewInit {
   }
 
   protected cardsFor(columnId: number): readonly KanbanCard[] {
-    return this.store.cardsFor(columnId);
+    // Reactive read: depends on the cardsByColumn signal so change detection
+    // re-runs after a mutation. Calling the store's plain function would NOT
+    // be reactive.
+    return this.cardsByColumn()[String(columnId)] ?? [];
   }
 
   protected bodyPreview(body: string | null): string {

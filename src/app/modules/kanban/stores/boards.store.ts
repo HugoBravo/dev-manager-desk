@@ -244,9 +244,26 @@ export class BoardsStore {
   );
 
   /**
+   * Reactive accessor: a signal that returns the cards-by-column map of the
+   * current board detail. Templates can read `cardsByColumn()` and Angular's
+   * signal-based change detection will re-render when the map mutates.
+   *
+   * Prefer this over {@link cardsFor} when you need template reactivity.
+   * `cardsFor(columnId)` is a plain function and will NOT trigger re-render
+   * by itself — it has to be called inside an already-reactive context.
+   */
+  readonly cardsByColumn = computed<Readonly<Record<string, readonly KanbanCard[]>>>(
+    () => this._currentBoard()?.cardsByColumnId ?? {},
+  );
+
+  /**
    * Convenience accessor: returns the cards for a column from the current
-   * detail, or `[]` if the column is unknown / no detail is loaded. Templates
-   * can call this directly with `cardsFor(columnId)`.
+   * detail, or `[]` if the column is unknown / no detail is loaded.
+   *
+   * NOTE: this is a plain function, not a signal. Callers that need template
+   * reactivity should read {@link cardsByColumn} directly (e.g.,
+   * `cardsByColumn()[String(columnId)] ?? []`) so the change detection cycle
+   * re-runs when the underlying signal mutates.
    */
   cardsFor(columnId: number): readonly KanbanCard[] {
     const current = this._currentBoard();
