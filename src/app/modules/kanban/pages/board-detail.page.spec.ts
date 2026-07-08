@@ -1,4 +1,5 @@
 import { TestBed } from '@angular/core/testing';
+import { effect } from '@angular/core';
 import { provideHttpClient } from '@angular/common/http';
 import {
   HttpTestingController,
@@ -6,6 +7,7 @@ import {
 } from '@angular/common/http/testing';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { provideRouter } from '@angular/router';
+import type { CdkDragDrop } from '@angular/cdk/drag-drop';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 
@@ -256,5 +258,108 @@ describe('BoardDetailPage', () => {
     expect(cardBody!.length).toBeLessThanOrEqual(201); // 200 + ellipsis
     expect(cardBody).not.toContain('<');
     expect(cardBody).not.toContain('h2');
+  });
+
+  it('422 position_exhausted triggers store.loadBoard refetch with no local card mutation', async () => {
+    // W2 — server-confirmed-reorder contract: on 422 position_exhausted
+    // the page MUST refetch the affected scope (no local recomputation).
+    const fixture = createComponent();
+    const httpMock = TestBed.inject(HttpTestingController);
+    const store = TestBed.inject(BoardsStore);
+    const moveBaseUrl = `${FULL_PREFIX}/projects/7/kanban/boards/4/columns/12/cards/87/move`;
+
+    const promise = fixture.whenStable();
+    await flushDetail(
+      httpMock,
+      7,
+      4,
+      sampleBoard(),
+      [sampleColumn(12), sampleColumn(13)],
+      { 12: [sampleCard(87, 12, 'Implement login form')], 13: [] },
+    );
+    fixture.detectChanges();
+    await promise;
+    expect(store.cardsFor(12).map((c) => c.id)).toEqual([87]);
+
+    // Record every emission of currentBoard() to detect any card-cache
+    // mutation between the 422 and the refetch.
+    const emissions: Array<Record<string, readonly number[]>> = [];
+    const recorder = TestBed.runInInjectionContext(() =>
+      effect(() => {
+        const detail = store.currentBoard();
+        if (detail === null) {
+          emissions.push({});
+          return;
+        }
+        const snap: Record<string, readonly number[]> = {};
+        for (const [columnId, cards] of Object.entries(detail.cardsByColumnId)) {
+          snap[columnId] = cards.map((c) => c.id);
+        }
+        emissions.push(snap);
+      }),
+    );
+
+    const dropEvent = {
+      previousIndex: 0,
+      currentIndex: 0,
+      item: { data: 87 } as never,
+      container: { data: { columnId: 13 } } as never,
+      previousContainer: { data: { columnId: 12 } } as never,
+      isPointerOverContainer: true,
+      distance: { x: 0, y: 0 },
+      dropPoint: { x: 0, y: 0 },
+      event: new MouseEvent('mouseup'),
+    } as CdkDragDrop<unknown, unknown, { columnId: number }>;
+    (fixture.componentInstance as unknown as {
+      onCardDrop: (e: typeof dropEvent) => void;
+    }).onCardDrop(dropEvent);
+
+    const moveReq = httpMock.expectOne(moveBaseUrl);
+    expect(moveReq.request.method).toBe('POST');
+    expect(moveReq.request.body).toEqual({ target_column_id: 13 });
+
+    // 422 position_exhausted must surface through W3 so the page can branch.
+    moveReq.flush(
+      { message: 'Server ran out of room to position items.', errors: {}, code: 'position_exhausted' },
+      { status: 422, statusText: 'Unprocessable Entity' },
+    );
+    await fixture.whenStable();
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    // Page MUST refetch: board + columns + cards per column.
+    const refetchBoardReq = httpMock.expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4`);
+    const refetchColumnsReq = httpMock.expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4/columns`);
+    refetchBoardReq.flush(sampleBoard());
+    refetchColumnsReq.flush(paginated([sampleColumn(12), sampleColumn(13)]));
+    // Spin so the inner forkJoin (cards per column) sets up its HTTP.
+    for (let i = 0; i < 5; i++) {
+      await fixture.whenStable();
+      fixture.detectChanges();
+    }
+
+    const refetchCardReqs = httpMock.match((req) =>
+      req.url.includes('/columns/') && req.url.endsWith('/cards'),
+    );
+    expect(refetchCardReqs.length).toBe(2);
+    const refetchCards12 = refetchCardReqs.find((r) => r.request.url.endsWith('/columns/12/cards'))!;
+    const refetchCards13 = refetchCardReqs.find((r) => r.request.url.endsWith('/columns/13/cards'))!;
+
+    // CRITICAL: between the 422 and the refetch response, the card
+    // cache must NOT have been mutated locally. If the page had
+    // optimistically moved the card, column 13 would already be [87].
+    const lastEmissionBeforeRefetch = emissions[emissions.length - 1] ?? {};
+    expect(lastEmissionBeforeRefetch['12']).toEqual([87]);
+    expect(lastEmissionBeforeRefetch['13']).toEqual([]);
+
+    refetchCards12.flush(paginated([sampleCard(87, 12, 'Implement login form')]));
+    refetchCards13.flush(paginated([]));
+    await fixture.whenStable();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(store.cardsFor(12).map((c) => c.id)).toEqual([87]);
+
+    recorder.destroy();
+    httpMock.verify();
   });
 });
