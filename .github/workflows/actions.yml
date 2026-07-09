@@ -1,70 +1,46 @@
 name: Test & Build & Deploy
 
-# on:
-#   push:
-#     branches:
-#       - main
+on:
+  push:
+    branches:
+      - main
 
-# jobs:
-#   build:
-#     runs-on: ubuntu-latest
+jobs:
+  build:
+    runs-on: ubuntu-latest
 
-#     steps:
-#       - uses: actions/checkout@v3
+    steps:
+      - uses: actions/checkout@v3
 
-#       - name: Cache node modules
-#         uses: actions/cache@v3
-#         env:
-#           cache-name: cache-node-modules
-#         with:
-#           path: ~/.npm
-#           key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('**/package-lock.json') }}
-#           restore-keys: |
-#             ${{ runner.os }}-build-${{ env.cache-name }}-
-#             ${{ runner.os }}-build-
-#             ${{ runner.os }}-
+      - name: Cache node modules
+        uses: actions/cache@v3
+        env:
+          cache-name: cache-node-modules
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-build-${{ env.cache-name }}-
+            ${{ runner.os }}-build-
+            ${{ runner.os }}-
 
-#       - name: Install Dependencies
-#         run: npm install --force
+      - name: Install Dependencies
+        run: npm install --force
 
-#       # - name: 🚥Test
-#       # run: npm run test
+      # - name: 🚥Test
+      # run: npm run test
 
-#       # - name: 👀 Lint
-#       # run: npm run lint
+      # - name: 👀 Lint
+      # run: npm run lint
 
-#       - name: 🔨 Build campobase
-#         run: npm run build:cb --configuration=production
+      - name: 🔨 Build campobase
+        run: npm run build
 
-#       - name: 📂 Deploy campobase
-#         uses: SamKirkland/FTP-Deploy-Action@4.3.0
-#         with:
-#           local-dir: ./dist/cashflow/browser/
-#           server: ftp.hostalcampobase.cl
-#           username: gh-cashflow@hostalcampobase.cl
-#           password: ${{ secrets.ftp_password }}
-#           dangerous-clean-slate: true
-
-#       - name: 🔨 build mamatierra
-#         run: npm run build:mamatierra
-
-#       - name: 📂 Deploy mamatierra
-#         uses: SamKirkland/FTP-Deploy-Action@4.3.0
-#         with:
-#           local-dir: ./dist/cashflow/browser/
-#           server: ftp.hostalmamatierra.cl
-#           username: gh-cashflow@hostalmamatierra.cl
-#           password: ${{ secrets.ftp_password_mamatierra }}
-#           dangerous-clean-slate: true
-
-#       # - name: 🔨 build belen
-#       #   run: npm run build:belen
-
-#       # - name: 📂 Deploy belen
-#       #   uses: SamKirkland/FTP-Deploy-Action@4.3.0
-#       #   with:
-#       #     local-dir: ./dist/cashflow/
-#       #     server: ftp.hostalbelen.cl
-#       #     username: gh-cashflow@hostalbelen.cl
-#       #     password: ${{ secrets.ftp_password_belen }}
-#       #     dangerous-clean-slate: true
+      - name: 📂 Deploy 
+        uses: SamKirkland/FTP-Deploy-Action@4.3.0
+        with:
+          local-dir: ./dist/cashflow/browser/
+          server: ftp.llamadev.cl
+          username: gh-devmanager@llamadev.cl
+          password: ${{ secrets.ftp_password }}
+          dangerous-clean-slate: true
