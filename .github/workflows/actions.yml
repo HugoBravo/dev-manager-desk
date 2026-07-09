@@ -39,7 +39,7 @@ jobs:
       - name: 📂 Deploy 
         uses: SamKirkland/FTP-Deploy-Action@4.3.0
         with:
-          local-dir: ./dist/cashflow/browser/
+          local-dir: ./dist/dev-manager-desk/browser/
           server: ftp.llamadev.cl
           username: gh-devmanager@llamadev.cl
           password: ${{ secrets.ftp_password }}
