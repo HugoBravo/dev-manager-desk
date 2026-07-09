@@ -1,4 +1,4 @@
 export const environment = {
-  apiBaseUrl: 'https://api.example.com/api',
+  apiBaseUrl: 'https://api.devmanager.llamadev.cl/api',
   production: true,
 };
