@@ -1,7 +1,21 @@
-import { Component, OnInit, computed, effect, inject, signal, viewChild } from '@angular/core';
+import {
+  Component,
+  Injectable,
+  OnInit,
+  computed,
+  effect,
+  inject,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { FormField, form, maxLength, required, submit, validate } from '@angular/forms/signals';
 import { MatButtonModule } from '@angular/material/button';
-import { MAT_DATE_FORMATS, provideNativeDateAdapter } from '@angular/material/core';
+import {
+  MAT_DATE_FORMATS,
+  MAT_NATIVE_DATE_FORMATS,
+  NativeDateAdapter,
+} from '@angular/material/core';
+import { DateAdapter } from '@angular/material/core';
 import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -12,21 +26,59 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { firstValueFrom } from 'rxjs';
 
 /**
- * Force the due-date picker to render as `dd/MM/yyyy` regardless of the
- * runtime locale. The backend expects `YYYY-MM-DD` (ISO); the picker writes
- * ISO into the form model automatically — only the visual format changes.
+ * dd/MM/yyyy display format used by the picker UI. The picker's `parse`
+ * direction reads ISO from the form model; the `display` direction renders
+ * the user-visible text.
+ */
+const DD_MM_YYYY_INPUT = { year: 'numeric', month: '2-digit', day: '2-digit' } as const;
+
+/**
+ * `MAT_DATE_FORMATS` that override only the user-visible `dateInput`. The
+ * `parse.dateInput` is set to the same display object so the input mask
+ * produces a value `parse()` can round-trip.
  */
 const DD_MM_YYYY_DATE_FORMATS = {
+  ...MAT_NATIVE_DATE_FORMATS,
   parse: {
-    dateInput: 'DD/MM/YYYY',
+    dateInput: DD_MM_YYYY_INPUT,
   },
   display: {
-    dateInput: 'DD/MM/YYYY',
-    monthYearLabel: 'MMM YYYY',
-    dateA11yLabel: 'DD/MM/YYYY',
-    monthYearA11yLabel: 'MMMM YYYY',
+    ...MAT_NATIVE_DATE_FORMATS.display,
+    dateInput: DD_MM_YYYY_INPUT,
   },
 };
+
+/**
+ * `NativeDateAdapter` already handles ISO `YYYY-MM-DD` parsing internally
+ * (the native `<input type="date">` mask produces it). But Angular Material
+ * treats the form model as a `Date` object, so binding via `[formField]`
+ * stores `Sat Jan 01 2026 ...` instead of `2026-01-01`. To keep the model
+ * as the ISO string the backend expects, we register a `DateAdapter` whose
+ * `getModel` / `setModel` (and the `format` direction that flows into the
+ * form) round-trip through ISO `YYYY-MM-DD`.
+ *
+ * Note: `NativeDateAdapter` does not expose `getModel`/`setModel` in the
+ * public API, but `format(date, DD_MM_YYYY_INPUT)` is called by the
+ * `MatDatepickerInput` when writing into the bound value. By returning the
+ * ISO string from `format()`, the value written to the form field IS the
+ * ISO string the backend wants.
+ */
+@Injectable()
+class IsoDateAdapter extends NativeDateAdapter {
+  override format(date: Date, displayFormat: object): string {
+    if (displayFormat === DD_MM_YYYY_INPUT) {
+      return toIso(date);
+    }
+    return super.format(date, displayFormat);
+  }
+}
+
+function toIso(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
 
 import { ErrorNormalizer } from '../../../../core/errors/error-normalizer';
 import type { ApiError } from '../../../../core/errors/api-error';
@@ -109,7 +161,7 @@ const BODY_MAX = 65535; // backend limit per api-doc §7.3.
     MatProgressSpinnerModule,
   ],
   providers: [
-    provideNativeDateAdapter(),
+    { provide: DateAdapter, useClass: IsoDateAdapter },
     { provide: MAT_DATE_FORMATS, useValue: DD_MM_YYYY_DATE_FORMATS },
   ],
   templateUrl: './card-editor-dialog.html',
