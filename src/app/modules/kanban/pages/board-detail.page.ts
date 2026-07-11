@@ -21,6 +21,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { Router } from '@angular/router';
 
 import { ErrorNormalizer } from '../../../core/errors/error-normalizer';
 import type { ApiError } from '../../../core/errors/api-error';
@@ -48,9 +49,14 @@ import {
   type LabelManagerDialogData,
   type LabelManagerDialogResult,
 } from '../components/label-manager-dialog/label-manager-dialog';
-import type { BoardDetail, KanbanCard, KanbanColumn } from '../models';
+import type { BoardDetail, BoardAuditLog, KanbanCard, KanbanColumn } from '../models';
 import { BoardsStore } from '../stores/boards.store';
 import { serverConfirmedMove } from '../utils/server-confirmed-move';
+import {
+  BoardEditorDialog,
+  type BoardEditorDialogData,
+  type BoardEditorDialogResult,
+} from '../components/board-editor-dialog/board-editor-dialog';
 
 /**
  * Board detail (PR3). Renders columns + cards, supports CDK drag-drop with
@@ -97,6 +103,7 @@ export class BoardDetailPage implements AfterViewInit {
   private readonly destroyRef = inject(DestroyRef);
   private readonly dialog = inject(MatDialog);
   private readonly snackBar = inject(MatSnackBar);
+  private readonly router = inject(Router);
 
   /** Bound from the route via `withComponentInputBinding()` */
   readonly projectId = input.required<string>();
@@ -111,6 +118,16 @@ export class BoardDetailPage implements AfterViewInit {
   // detection re-runs after a mutation (create / archive / restore / move).
   protected readonly cardsByColumn = this.store.cardsByColumn;
   protected readonly reloadTrigger = signal(0);
+
+  /**
+   * Audit panel toggle and entries (api-doc §19). The panel is closed by
+   * default; opening it issues a {@link KanbanApi.listBoardAudit} fetch and
+   * stores the entries here. The component reuses the page-level snackbar
+   * for error surfaces so the UX matches the move / archive flows.
+   */
+  protected readonly auditPanelOpen = signal(false);
+  protected readonly auditEntries = signal<readonly BoardAuditLog[]>([]);
+  protected readonly auditLoading = signal(false);
 
   protected readonly isBusy = computed(() => this.loading());
   protected readonly current = this.projectService.current;
@@ -449,9 +466,7 @@ export class BoardDetailPage implements AfterViewInit {
     if (!confirmed) {
       return;
     }
-    void firstValueFrom(
-      this.writeApi.deleteColumn(projectIdNum, boardIdNum, column.id),
-    )
+    void firstValueFrom(this.writeApi.deleteColumn(projectIdNum, boardIdNum, column.id))
       .then(() => {
         this.store.applyColumnRemoved(column.id);
         this.snackBar.open('Deleted', 'Dismiss', { duration: 2000 });
@@ -464,17 +479,13 @@ export class BoardDetailPage implements AfterViewInit {
           'kind' in apiError &&
           (apiError as ApiError).kind === 'conflict'
         ) {
-          this.snackBar.open(
-            'This column has cards. Move or delete them first.',
-            'Dismiss',
-            { duration: 4000 },
-          );
+          this.snackBar.open('This column has cards. Move or delete them first.', 'Dismiss', {
+            duration: 4000,
+          });
           return;
         }
         this.snackBar.open(
-          err &&
-            typeof err === 'object' &&
-            'kind' in err
+          err && typeof err === 'object' && 'kind' in err
             ? ErrorNormalizer.toUserMessage(err as ApiError)
             : 'Could not delete the column. Please try again.',
           'Dismiss',
@@ -554,6 +565,153 @@ export class BoardDetailPage implements AfterViewInit {
 
   protected bodyPreview(body: string | null): string {
     return truncatePlainText(body, 200);
+  }
+
+  // --- Board-level management (Batch 6 — Task 2.8) ---
+
+  /**
+   * Open the board editor dialog in `rename` mode. Triggered from the
+   * header menu's "Rename board" entry. On submit, PATCHes the board
+   * with the trimmed new name, commits via
+   * {@link BoardsStore.applyBoardUpdated}, and reloads the detail so
+   * the new name renders.
+   */
+  protected openRenameBoardDialog(triggerElement: HTMLElement): void {
+    const projectIdNum = parseId(this.projectId());
+    const boardIdNum = parseId(this.boardId());
+    if (projectIdNum === null || boardIdNum === null) {
+      return;
+    }
+    const current = this.detail()?.board;
+    if (!current) {
+      return;
+    }
+    const data: BoardEditorDialogData = {
+      mode: 'rename',
+      projectId: projectIdNum,
+      boardId: boardIdNum,
+      initialName: current.name,
+      triggerElement,
+    };
+    const ref = this.dialog.open<BoardEditorDialog, BoardEditorDialogData, BoardEditorDialogResult>(
+      BoardEditorDialog,
+      { data },
+    );
+    void firstValueFrom(ref.afterClosed()).then((result) => {
+      if (!result || result.action !== 'saved' || !result.name) {
+        return;
+      }
+      if (result.name === current.name) {
+        return;
+      }
+      void this.renameBoard(projectIdNum, boardIdNum, result.name);
+    });
+  }
+
+  /**
+   * Confirm then soft-delete the current board. On 204 the page navigates
+   * back to the project's boards list so the user sees the board vanish
+   * from the active list. On 409 `board_has_contents`, a snackbar tells the
+   * user to archive or empty the board first — the detail page already
+   * exposes archive affordances per column, so no separate dialog is
+   * needed.
+   */
+  protected openDeleteBoardConfirm(): void {
+    const projectIdNum = parseId(this.projectId());
+    const boardIdNum = parseId(this.boardId());
+    if (projectIdNum === null || boardIdNum === null) {
+      return;
+    }
+    const current = this.detail()?.board;
+    if (!current) {
+      return;
+    }
+    const confirmed = window.confirm(`Delete board "${current.name}"? This moves it to the trash.`);
+    if (!confirmed) {
+      return;
+    }
+    void this.deleteBoard(projectIdNum, boardIdNum, current.name);
+  }
+
+  /**
+   * Toggle the audit panel. First open fires a {@link KanbanApi.listBoardAudit}
+   * fetch; subsequent opens reuse the cached entries until the user
+   * explicitly refreshes (next iteration).
+   */
+  protected toggleAuditPanel(): void {
+    if (this.auditPanelOpen()) {
+      this.auditPanelOpen.set(false);
+      return;
+    }
+    this.auditPanelOpen.set(true);
+    const projectIdNum = parseId(this.projectId());
+    const boardIdNum = parseId(this.boardId());
+    if (projectIdNum === null || boardIdNum === null) {
+      return;
+    }
+    this.auditLoading.set(true);
+    this.api
+      .listBoardAudit(projectIdNum, boardIdNum)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (entries) => {
+          this.auditEntries.set(entries);
+          this.auditLoading.set(false);
+        },
+        error: (err: unknown) => {
+          this.auditLoading.set(false);
+          const apiError =
+            err && typeof err === 'object' && 'kind' in err
+              ? ErrorNormalizer.toUserMessage(err as ApiError)
+              : 'Could not load the audit log.';
+          this.snackBar.open(apiError, 'Dismiss', { duration: 4000 });
+        },
+      });
+  }
+
+  private async renameBoard(projectIdNum: number, boardIdNum: number, name: string): Promise<void> {
+    try {
+      await firstValueFrom(this.writeApi.updateBoard(projectIdNum, boardIdNum, { name }));
+      // Refetch the detail so the title shows the new name without a
+      // race between the cached resource and the renamed one.
+      await this.store.loadBoard(projectIdNum, boardIdNum);
+      this.snackBar.open(`Renamed to "${name}"`, 'Dismiss', { duration: 2500 });
+    } catch (err) {
+      const apiError =
+        err && typeof err === 'object' && 'kind' in err
+          ? ErrorNormalizer.toUserMessage(err as ApiError)
+          : 'Could not rename the board.';
+      this.snackBar.open(apiError, 'Dismiss', { duration: 4000 });
+    }
+  }
+
+  private async deleteBoard(projectIdNum: number, boardIdNum: number, name: string): Promise<void> {
+    try {
+      await firstValueFrom(this.writeApi.deleteBoard(projectIdNum, boardIdNum));
+      this.snackBar.open(`Moved "${name}" to trash`, 'Dismiss', { duration: 2500 });
+      void this.router.navigate(['/modules/kanban/projects', projectIdNum, 'boards']);
+    } catch (err) {
+      const apiError = err as ApiError | unknown;
+      if (
+        apiError &&
+        typeof apiError === 'object' &&
+        'kind' in apiError &&
+        (apiError as ApiError).kind === 'conflict' &&
+        (apiError as { code?: string }).code === 'board_has_contents'
+      ) {
+        this.snackBar.open(
+          'This board has columns or cards. Empty it before deleting.',
+          'Dismiss',
+          { duration: 5000 },
+        );
+        return;
+      }
+      const userMessage =
+        apiError && typeof apiError === 'object' && 'kind' in apiError
+          ? ErrorNormalizer.toUserMessage(apiError as ApiError)
+          : 'Could not delete the board.';
+      this.snackBar.open(userMessage, 'Dismiss', { duration: 4000 });
+    }
   }
 }
 

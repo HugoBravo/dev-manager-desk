@@ -7,6 +7,7 @@ import { provideRouter } from '@angular/router';
 import type { CdkDragDrop } from '@angular/cdk/drag-drop';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { of } from 'rxjs';
 
 import { API_CONFIG } from '../../../core/config/api-config';
 import { KanbanApi } from '../api/kanban.api';
@@ -14,6 +15,11 @@ import { KanbanWriteApi } from '../api/kanban-write.api';
 import { BoardsStore } from '../stores/boards.store';
 import { LabelsStore } from '../stores/labels.store';
 import { BoardDetailPage } from './board-detail.page';
+import { BoardEditorDialog } from '../components/board-editor-dialog/board-editor-dialog';
+import type {
+  BoardEditorDialogData,
+  BoardEditorDialogResult,
+} from '../components/board-editor-dialog/board-editor-dialog';
 
 const API_BASE_URL = 'http://localhost:8000/api';
 const API_PREFIX = '/v1';
@@ -110,9 +116,12 @@ async function flushDetail(
 }
 
 describe('BoardDetailPage', () => {
+  let confirmSpy: ReturnType<typeof vi.spyOn>;
+
   beforeEach(async () => {
     TestBed.resetTestingModule();
     window.localStorage.clear();
+    confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     await TestBed.configureTestingModule({
       imports: [BoardDetailPage, MatDialogModule, MatSnackBarModule, NoopAnimationsModule],
       providers: [
@@ -404,5 +413,168 @@ describe('BoardDetailPage', () => {
 
     recorder.destroy();
     httpMock.verify();
+  });
+
+  // --- Batch 6 — Task 2.8 ---
+
+  it('header action menu has Rename board, Delete board, View audit log items', async () => {
+    const fixture = createComponent();
+    const httpMock = TestBed.inject(HttpTestingController);
+    const promise = fixture.whenStable();
+    await flushDetail(httpMock, 7, 4, sampleBoard(), [sampleColumn(12)], { 12: [] });
+    fixture.detectChanges();
+    await promise;
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    const trigger = host.querySelector<HTMLButtonElement>(
+      '[data-testid="board-menu-trigger"]',
+    );
+    expect(trigger).not.toBeNull();
+
+    trigger!.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(
+      document.body.querySelector('[data-testid="board-menu-rename"]'),
+    ).not.toBeNull();
+    expect(
+      document.body.querySelector('[data-testid="board-menu-delete"]'),
+    ).not.toBeNull();
+    expect(
+      document.body.querySelector('[data-testid="board-menu-audit"]'),
+    ).not.toBeNull();
+  });
+
+  it('clicking View audit log expands the audit panel and calls listBoardAudit', async () => {
+    const fixture = createComponent();
+    const httpMock = TestBed.inject(HttpTestingController);
+    const promise = fixture.whenStable();
+    await flushDetail(httpMock, 7, 4, sampleBoard(), [sampleColumn(12)], { 12: [] });
+    fixture.detectChanges();
+    await promise;
+    fixture.detectChanges();
+
+    const trigger = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(
+      '[data-testid="board-menu-trigger"]',
+    )!;
+    trigger.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const auditItem = document.body.querySelector<HTMLButtonElement>(
+      '[data-testid="board-menu-audit"]',
+    )!;
+    auditItem.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const auditReq = httpMock.expectOne(
+      `${FULL_PREFIX}/projects/7/kanban/boards/4/audit`,
+    );
+    expect(auditReq.request.method).toBe('GET');
+    auditReq.flush(
+      paginated([
+        {
+          id: 1,
+          board_id: 4,
+          actor_user_id: 1,
+          action: 'created',
+          payload: {},
+          created_at: '2026-01-01T00:00:00Z',
+        },
+        {
+          id: 2,
+          board_id: 4,
+          actor_user_id: 1,
+          action: 'renamed',
+          payload: { from: 'Old', to: 'New' },
+          created_at: '2026-01-02T00:00:00Z',
+        },
+      ]),
+    );
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const panel = (fixture.nativeElement as HTMLElement).querySelector(
+      '[data-testid="audit-panel"]',
+    );
+    expect(panel).not.toBeNull();
+    const entries = panel?.querySelectorAll('[data-testid="audit-entry"]');
+    expect(entries?.length).toBe(2);
+  });
+
+  it('clicking Rename opens BoardEditorDialog in rename mode', async () => {
+    const fixture = createComponent();
+    const httpMock = TestBed.inject(HttpTestingController);
+    const promise = fixture.whenStable();
+    await flushDetail(httpMock, 7, 4, sampleBoard(), [sampleColumn(12)], { 12: [] });
+    fixture.detectChanges();
+    await promise;
+    fixture.detectChanges();
+
+    const dialog = TestBed.inject(MatDialog);
+    const openSpy = vi.spyOn(dialog, 'open');
+
+    const trigger = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(
+      '[data-testid="board-menu-trigger"]',
+    )!;
+    trigger.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const renameItem = document.body.querySelector<HTMLButtonElement>(
+      '[data-testid="board-menu-rename"]',
+    )!;
+    renameItem.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const boardCall = openSpy.mock.calls.find((call) => call[0] === BoardEditorDialog);
+    expect(boardCall).toBeDefined();
+    const data = boardCall![1]?.data as BoardEditorDialogData;
+    expect(data.mode).toBe('rename');
+    expect(data.boardId).toBe(4);
+    expect(data.initialName).toBe('Sprint 42');
+  });
+
+  it('clicking Delete confirms then calls deleteBoard; on 204 navigates to the boards list', async () => {
+    const fixture = createComponent();
+    const httpMock = TestBed.inject(HttpTestingController);
+    const promise = fixture.whenStable();
+    await flushDetail(httpMock, 7, 4, sampleBoard(), [sampleColumn(12)], { 12: [] });
+    fixture.detectChanges();
+    await promise;
+    fixture.detectChanges();
+
+    const writeApi = TestBed.inject(KanbanWriteApi);
+    const deleteSpy = vi.spyOn(writeApi, 'deleteBoard').mockReturnValue(of(undefined));
+
+    const router = (fixture.componentInstance as unknown as {
+      router: { navigate: (cmds: unknown[]) => Promise<boolean> };
+    }).router;
+    const navSpy = vi.spyOn(router, 'navigate');
+
+    const trigger = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(
+      '[data-testid="board-menu-trigger"]',
+    )!;
+    trigger.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const deleteItem = document.body.querySelector<HTMLButtonElement>(
+      '[data-testid="board-menu-delete"]',
+    )!;
+    deleteItem.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    // Allow async chain to settle.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    fixture.detectChanges();
+
+    expect(confirmSpy).toHaveBeenCalled();
+    expect(deleteSpy).toHaveBeenCalledWith(7, 4);
+    expect(navSpy).toHaveBeenCalledWith(['/modules/kanban/projects', 7, 'boards']);
   });
 });

@@ -65,7 +65,85 @@
         <mat-icon aria-hidden="true">add</mat-icon>
         Add column
       </button>
+      <button
+        mat-icon-button
+        type="button"
+        class="board-menu-trigger"
+        data-testid="board-menu-trigger"
+        aria-label="Board actions"
+        [matMenuTriggerFor]="boardMenu"
+      >
+        <mat-icon aria-hidden="true">more_vert</mat-icon>
+      </button>
+      <mat-menu #boardMenu="matMenu">
+        <button
+          mat-menu-item
+          type="button"
+          data-testid="board-menu-rename"
+          (click)="openRenameBoardDialog($any($event.currentTarget))"
+          aria-label="Rename board"
+        >
+          <mat-icon aria-hidden="true">edit</mat-icon>
+          <span>Rename board</span>
+        </button>
+        <button
+          mat-menu-item
+          type="button"
+          data-testid="board-menu-delete"
+          (click)="openDeleteBoardConfirm()"
+          aria-label="Delete board"
+        >
+          <mat-icon aria-hidden="true">delete</mat-icon>
+          <span>Delete board</span>
+        </button>
+        <button
+          mat-menu-item
+          type="button"
+          data-testid="board-menu-audit"
+          (click)="toggleAuditPanel()"
+          aria-label="View audit log"
+        >
+          <mat-icon aria-hidden="true">history</mat-icon>
+          <span>View audit log</span>
+        </button>
+      </mat-menu>
     </div>
+
+    @if (auditPanelOpen()) {
+      <section class="audit-panel" data-testid="audit-panel" aria-label="Audit log" role="region">
+        <header class="audit-panel-header">
+          <h2 class="audit-panel-title">Audit log</h2>
+          <button
+            mat-icon-button
+            type="button"
+            aria-label="Close audit log"
+            (click)="toggleAuditPanel()"
+          >
+            <mat-icon aria-hidden="true">close</mat-icon>
+          </button>
+        </header>
+        @if (auditLoading()) {
+          <div class="audit-panel-loading" role="status" aria-live="polite">
+            <mat-progress-spinner mode="indeterminate" diameter="32"></mat-progress-spinner>
+            <span>Loading audit log</span>
+          </div>
+        } @else if (auditEntries().length === 0) {
+          <p class="audit-panel-empty">No audit entries yet.</p>
+        } @else {
+          <ul class="audit-panel-list" aria-label="Audit entries">
+            @for (entry of auditEntries(); track entry.id) {
+              <li class="audit-panel-entry" data-testid="audit-entry">
+                <span class="audit-panel-action">{{ entry.action }}</span>
+                <span class="audit-panel-time">{{ entry.created_at }}</span>
+                @if (entry.actor_user_id !== null) {
+                  <span class="audit-panel-actor">by user {{ entry.actor_user_id }}</span>
+                }
+              </li>
+            }
+          </ul>
+        }
+      </section>
+    }
 
     @if (data.columns.length === 0) {
       <mat-card appearance="outlined" class="state-empty-board">
