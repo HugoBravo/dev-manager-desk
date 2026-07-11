@@ -221,6 +221,17 @@ export class BoardDetailPage implements AfterViewInit {
     onSuccess: (card) => {
       this.store.applyCardMutation(card);
       this.snackBar.open(`Moved "${card.title}"`, 'Dismiss', { duration: 2000 });
+      // Refetch the board so the UI matches the server's canonical
+      // ordering. The optimistic mutation above keeps the affected
+      // columns correct in the common case, but a drag from one
+      // dropList to another can leave CDK's DOM swap out of sync
+      // with the signal-driven re-render — the refetch guarantees the
+      // visible order matches what the server actually persisted.
+      const projectIdNum = parseId(this.projectId());
+      const boardIdNum = parseId(this.boardId());
+      if (projectIdNum !== null && boardIdNum !== null) {
+        void this.store.loadBoard(projectIdNum, boardIdNum);
+      }
     },
     onError: (err) => {
       this.handleMoveError(err);
