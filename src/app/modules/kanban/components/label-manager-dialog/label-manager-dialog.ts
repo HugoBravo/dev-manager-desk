@@ -2,11 +2,14 @@ import {
   ChangeDetectionStrategy,
   Component,
   ElementRef,
+  computed,
+  effect,
   inject,
   signal,
   viewChild,
 } from '@angular/core';
-import { FormsModule } from '@angular/forms';
+import { FormField, form, maxLength, required, submit, validate } from '@angular/forms/signals';
+import type { ValidationError } from '@angular/forms/signals';
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
@@ -52,6 +55,17 @@ export interface LabelManagerDialogResult {
 const NAME_MAX = 64;
 
 /**
+ * Custom error kind for whitespace-only input. `required` accepts
+ * non-empty strings even when they consist solely of spaces, so the
+ * dialog adds an explicit check to keep the form invalid until the
+ * user types real content (matching the server's `min:1` after trim).
+ */
+interface WhitespaceOnlyError extends ValidationError.WithoutFieldTree {
+  readonly kind: 'whitespaceOnly';
+  readonly message: string;
+}
+
+/**
  * Material dialog for managing the authenticated user's label library.
  *
  * Two regions:
@@ -76,7 +90,7 @@ const NAME_MAX = 64;
   selector: 'app-label-manager-dialog',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    FormsModule,
+    FormField,
     MatButtonModule,
     MatButtonToggleModule,
     MatDialogModule,
@@ -89,30 +103,36 @@ const NAME_MAX = 64;
     <h2 #titleRef mat-dialog-title id="label-manager-title" tabindex="-1">Manage labels</h2>
 
     <mat-dialog-content class="content" [attr.aria-describedby]="'label-manager-create-error'">
-      <form class="create-row" (submit)="onCreate($event)">
+      <form
+        class="create-row"
+        (submit)="onCreate($event)"
+        novalidate
+        aria-labelledby="label-manager-title"
+      >
         <mat-form-field appearance="outline" class="name-field" subscriptSizing="dynamic">
           <input
             #createNameInput
             matInput
             type="text"
-            [(ngModel)]="createName"
-            name="createName"
-            [maxlength]="NAME_MAX"
-            placeholder="New label name"
             autocomplete="off"
-            required
+            placeholder="New label name"
+            [formField]="createForm.name"
             aria-label="New label name"
-            (keydown.enter)="onCreate($event)"
           />
-          <mat-hint align="end">{{ createName.length }} / {{ NAME_MAX }}</mat-hint>
+          <mat-hint align="end">{{ createForm.name().value().length }} / {{ NAME_MAX }}</mat-hint>
+          @if (createForm.name().errors().length > 0) {
+            <mat-error id="label-manager-create-error" role="alert">
+              {{ createForm.name().errors()[0].message }}
+            </mat-error>
+          }
         </mat-form-field>
         <div class="create-row-controls">
           <mat-button-toggle-group
             class="palette"
             aria-label="Color palette"
             [hideSingleSelectionIndicator]="true"
-            [(ngModel)]="createColor"
-            name="createColor"
+            [value]="createColor()"
+            (change)="onColorChange($event)"
           >
             @for (color of palette; track color) {
               <mat-button-toggle
@@ -128,7 +148,7 @@ const NAME_MAX = 64;
             mat-flat-button
             color="primary"
             type="submit"
-            [disabled]="!canCreate() || store.loading() === 'create'"
+            [disabled]="createForm().invalid() || store.loading() === 'create'"
             aria-label="Create new label"
           >
             @if (store.loading() === 'create') {
@@ -188,10 +208,12 @@ const NAME_MAX = 64;
                     #renameInput
                     matInput
                     type="text"
-                    [(ngModel)]="renameDraft"
-                    [maxlength]="NAME_MAX"
+                    [value]="renameDraft()"
+                    [attr.maxlength]="NAME_MAX"
                     required
+                    autocomplete="off"
                     aria-label="Rename label"
+                    (input)="onRenameDraftInput($event)"
                     (keydown.enter)="commitRename($event, label)"
                     (keydown.escape)="cancelRename()"
                   />
@@ -201,7 +223,7 @@ const NAME_MAX = 64;
                   color="primary"
                   type="button"
                   (click)="commitRename($event, label)"
-                  [disabled]="!renameDraft.trim() || store.loading() === 'update'"
+                  [disabled]="!renameDraft().trim() || store.loading() === 'update'"
                   aria-label="Save label name"
                 >
                   Save
@@ -233,8 +255,8 @@ const NAME_MAX = 64;
                   class="palette inline-palette"
                   aria-label="Pick a color"
                   [hideSingleSelectionIndicator]="true"
-                  [(ngModel)]="recolorDraft"
-                  (change)="commitRecolor(label, recolorDraft)"
+                  [value]="recolorDraft()"
+                  (change)="onRecolorDraftChange($event, label)"
                 >
                   @for (color of palette; track color) {
                     <mat-button-toggle
@@ -418,16 +440,32 @@ export class LabelManagerDialog {
   protected readonly NAME_MAX = NAME_MAX;
   protected readonly palette = LABEL_PALETTE;
 
-  /** Create-row state. */
-  protected createName = '';
-  protected createColor = LABEL_PALETTE[0] ?? '#64748b';
+  /** Create-row state — uses Signal Forms for the name input. */
+  protected readonly createColor = signal<string>(LABEL_PALETTE[0] ?? '#64748b');
   protected readonly createError = signal<string | null>(null);
+
+  protected readonly createForm = form(signal<{ name: string }>({ name: '' }), (schemaPath) => {
+    required(schemaPath.name, { message: 'Name is required.' });
+    maxLength(schemaPath.name, NAME_MAX, {
+      message: `Name must be ${NAME_MAX} characters or fewer.`,
+    });
+    validate(schemaPath.name, (ctx) => {
+      const value = ctx.value();
+      if (typeof value === 'string' && value.trim().length === 0 && value.length > 0) {
+        return {
+          kind: 'whitespaceOnly',
+          message: 'Name cannot be only whitespace.',
+        } satisfies WhitespaceOnlyError;
+      }
+      return null;
+    });
+  });
 
   /** Per-row state. */
   protected readonly renamingId = signal<number | null>(null);
-  protected renameDraft = '';
+  protected readonly renameDraft = signal<string>('');
   protected readonly recoloringId = signal<number | null>(null);
-  protected recolorDraft = '';
+  protected readonly recolorDraft = signal<string>('');
   protected readonly confirmingDeleteId = signal<number | null>(null);
 
   private readonly titleRef = viewChild<ElementRef<HTMLElement>>('titleRef');
@@ -435,6 +473,10 @@ export class LabelManagerDialog {
   private readonly renameInputRef = viewChild<ElementRef<HTMLInputElement>>('renameInput');
 
   constructor() {
+    // Track the create form so OnPush re-renders when fields mutate.
+    effect(() => {
+      void this.createForm().value();
+    });
     // Idempotent load — only fires when the cache is empty. The user
     // can still hit the list via a future refetch trigger.
     void this.store.ensureLoaded();
@@ -448,38 +490,42 @@ export class LabelManagerDialog {
 
   // --- Create ---
 
-  protected canCreate(): boolean {
-    return this.createName.trim().length > 0 && this.createName.length <= NAME_MAX;
-  }
-
   protected async onCreate(event: Event): Promise<void> {
     event.preventDefault();
-    if (!this.canCreate()) {
+    if (this.createForm().invalid()) {
       return;
     }
     this.createError.set(null);
     const created = await this.store.create({
-      name: this.createName.trim(),
-      color: this.createColor,
+      name: this.createForm().value().name.trim(),
+      color: this.createColor(),
     });
     if (created === null) {
       this.createError.set(this.fieldOrFallback(this.store.error(), 'name'));
       return;
     }
-    this.createName = '';
-    this.createColor = LABEL_PALETTE[0] ?? '#64748b';
     this.snackBar.open(`Label "${created.name}" created`, 'Dismiss', { duration: 2500 });
+    // Reset for the next label without closing the dialog.
+    this.createForm().reset({ name: '' });
+    this.createColor.set(LABEL_PALETTE[0] ?? '#64748b');
     // Dialog stays open so the user can create another label in the same
     // session without re-opening. Callers listening via afterClosed() will
     // see action: 'closed' when the user actually closes the modal.
     void created;
   }
 
+  protected onColorChange(event: { value: string | string[] }): void {
+    const value = Array.isArray(event.value) ? event.value[0] : event.value;
+    if (typeof value === 'string') {
+      this.createColor.set(value);
+    }
+  }
+
   // --- Rename ---
 
   protected startRename(label: KanbanLabel): void {
     this.renamingId.set(label.id);
-    this.renameDraft = label.name;
+    this.renameDraft.set(label.name);
     this.confirmingDeleteId.set(null);
     this.recoloringId.set(null);
     queueMicrotask(() => {
@@ -491,12 +537,17 @@ export class LabelManagerDialog {
 
   protected cancelRename(): void {
     this.renamingId.set(null);
-    this.renameDraft = '';
+    this.renameDraft.set('');
+  }
+
+  protected onRenameDraftInput(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    this.renameDraft.set(input.value);
   }
 
   protected async commitRename(event: Event, label: KanbanLabel): Promise<void> {
     event.preventDefault();
-    const next = this.renameDraft.trim();
+    const next = this.renameDraft().trim();
     if (!next || next === label.name) {
       this.cancelRename();
       return;
@@ -516,9 +567,18 @@ export class LabelManagerDialog {
 
   protected startRecolor(label: KanbanLabel): void {
     this.recoloringId.set(label.id);
-    this.recolorDraft = label.color;
+    this.recolorDraft.set(label.color);
     this.renamingId.set(null);
     this.confirmingDeleteId.set(null);
+  }
+
+  protected onRecolorDraftChange(event: { value: string | string[] }, label: KanbanLabel): void {
+    const value = Array.isArray(event.value) ? event.value[0] : event.value;
+    if (typeof value !== 'string') {
+      return;
+    }
+    this.recolorDraft.set(value);
+    void this.commitRecolor(label, value);
   }
 
   protected async commitRecolor(label: KanbanLabel, color: string): Promise<void> {
