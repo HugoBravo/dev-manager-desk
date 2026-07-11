@@ -44,17 +44,12 @@
       <input
         matInput
         [matDatepicker]="dueDatePicker"
-        [formField]="cardForm.due_date"
+        [value]="dueDate()"
+        (dateChange)="dueDate.set($event.value)"
         aria-label="Due date"
-        aria-describedby="due-errors"
       />
       <mat-datepicker-toggle matIconSuffix [for]="dueDatePicker" />
       <mat-datepicker #dueDatePicker />
-      @if (cardForm.due_date().errors().length > 0) {
-        <mat-error id="due-errors">
-          {{ cardForm.due_date().errors()[0].message }}
-        </mat-error>
-      }
     </mat-form-field>
 
     @if (isEdit()) {

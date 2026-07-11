@@ -1,21 +1,7 @@
-import {
-  Component,
-  Injectable,
-  OnInit,
-  computed,
-  effect,
-  inject,
-  signal,
-  viewChild,
-} from '@angular/core';
+import { Component, OnInit, computed, effect, inject, signal, viewChild } from '@angular/core';
 import { FormField, form, maxLength, required, submit, validate } from '@angular/forms/signals';
 import { MatButtonModule } from '@angular/material/button';
-import {
-  MAT_DATE_FORMATS,
-  MAT_NATIVE_DATE_FORMATS,
-  NativeDateAdapter,
-} from '@angular/material/core';
-import { DateAdapter } from '@angular/material/core';
+import { MAT_DATE_LOCALE, provideNativeDateAdapter } from '@angular/material/core';
 import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -26,58 +12,33 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { firstValueFrom } from 'rxjs';
 
 /**
- * dd/MM/yyyy display format used by the picker UI. The picker's `parse`
- * direction reads ISO from the form model; the `display` direction renders
- * the user-visible text.
+ * Serialize a `Date` (or null) into the `YYYY-MM-DD` shape the backend
+ * validates against. The picker UI shows `dd/MM/yyyy` (locale-aware),
+ * but the wire format is always ISO to match the `Y-m-d` rule.
  */
-const DD_MM_YYYY_INPUT = { year: 'numeric', month: '2-digit', day: '2-digit' } as const;
-
-/**
- * `MAT_DATE_FORMATS` that override only the user-visible `dateInput`. The
- * `parse.dateInput` is set to the same display object so the input mask
- * produces a value `parse()` can round-trip.
- */
-const DD_MM_YYYY_DATE_FORMATS = {
-  ...MAT_NATIVE_DATE_FORMATS,
-  parse: {
-    dateInput: DD_MM_YYYY_INPUT,
-  },
-  display: {
-    ...MAT_NATIVE_DATE_FORMATS.display,
-    dateInput: DD_MM_YYYY_INPUT,
-  },
-};
-
-/**
- * `NativeDateAdapter` already handles ISO `YYYY-MM-DD` parsing internally
- * (the native `<input type="date">` mask produces it). But Angular Material
- * treats the form model as a `Date` object, so binding via `[formField]`
- * stores `Sat Jan 01 2026 ...` instead of `2026-01-01`. To keep the model
- * as the ISO string the backend expects, we register a `DateAdapter` whose
- * `getModel` / `setModel` (and the `format` direction that flows into the
- * form) round-trip through ISO `YYYY-MM-DD`.
- *
- * Note: `NativeDateAdapter` does not expose `getModel`/`setModel` in the
- * public API, but `format(date, DD_MM_YYYY_INPUT)` is called by the
- * `MatDatepickerInput` when writing into the bound value. By returning the
- * ISO string from `format()`, the value written to the form field IS the
- * ISO string the backend wants.
- */
-@Injectable()
-class IsoDateAdapter extends NativeDateAdapter {
-  override format(date: Date, displayFormat: object): string {
-    if (displayFormat === DD_MM_YYYY_INPUT) {
-      return toIso(date);
-    }
-    return super.format(date, displayFormat);
+function toIsoDate(date: Date | null): string | null {
+  if (!date) {
+    return null;
   }
-}
-
-function toIso(date: Date): string {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, '0');
   const d = String(date.getDate()).padStart(2, '0');
   return `${y}-${m}-${d}`;
+}
+
+/**
+ * Parse an ISO `YYYY-MM-DD` string from the card payload into a `Date`
+ * for the picker in edit mode. Returns null when the source is empty.
+ */
+function fromIsoDate(iso: string | null | undefined): Date | null {
+  if (!iso) {
+    return null;
+  }
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (!match) {
+    return null;
+  }
+  return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
 }
 
 import { ErrorNormalizer } from '../../../../core/errors/error-normalizer';
@@ -97,8 +58,6 @@ import { CardLabelsPicker } from '../card-labels-picker/card-labels-picker';
 export interface CardEditorModel {
   title: string;
   body: string;
-  /** Empty string = no due date. We send `null` to the API in that case. */
-  due_date: string;
   assignee_id: string;
 }
 
@@ -160,10 +119,7 @@ const BODY_MAX = 65535; // backend limit per api-doc §7.3.
     MatInputModule,
     MatProgressSpinnerModule,
   ],
-  providers: [
-    { provide: DateAdapter, useClass: IsoDateAdapter },
-    { provide: MAT_DATE_FORMATS, useValue: DD_MM_YYYY_DATE_FORMATS },
-  ],
+  providers: [provideNativeDateAdapter(), { provide: MAT_DATE_LOCALE, useValue: 'es-ES' }],
   templateUrl: './card-editor-dialog.html',
   styleUrl: './card-editor-dialog.scss',
   host: {
@@ -202,6 +158,12 @@ export class CardEditorDialog implements OnInit {
   /**
    * Initial form value. For create mode this is empty; for edit mode it
    * prefills from the existing card.
+   *
+   * Note: `due_date` is intentionally NOT part of the Signal Forms model.
+   * Angular Material's `MatDatepicker` writes `Date` objects through its
+   * adapter, which `Signal Forms` would `toString()` and break the
+   * backend's `Y-m-d` rule. We keep the date in a plain signal below and
+   * serialize to ISO at submit time.
    */
   protected readonly cardForm = form(
     signal<CardEditorModel>(initialModel(this.data)),
@@ -227,11 +189,16 @@ export class CardEditorDialog implements OnInit {
         const list = this.serverFieldErrors()?.['body'];
         return list && list.length > 0 ? { kind: 'server', message: list[0]! } : undefined;
       });
-      validate(schemaPath.due_date, () => {
-        const list = this.serverFieldErrors()?.['due_date'];
-        return list && list.length > 0 ? { kind: 'server', message: list[0]! } : undefined;
-      });
     },
+  );
+
+  /**
+   * Due date held outside the Signal Forms model. The picker writes
+   * `Date | null` here via `(dateChange)`. On submit we serialize with
+   * {@link toIsoDate} so the payload matches the backend's `Y-m-d` rule.
+   */
+  protected readonly dueDate = signal<Date | null>(
+    this.data.mode === 'edit' ? fromIsoDate(this.data.card?.due_date) : null,
   );
 
   /** Server field errors (422 from create / update). */
@@ -283,6 +250,7 @@ export class CardEditorDialog implements OnInit {
 
     const submitted = await submit(this.cardForm, async () => {
       const model = this.cardForm().value();
+      const dueDateIso = toIsoDate(this.dueDate());
       try {
         const card =
           this.data.mode === 'create'
@@ -294,7 +262,7 @@ export class CardEditorDialog implements OnInit {
                   {
                     title: model.title,
                     body: model.body || null,
-                    due_date: model.due_date || null,
+                    due_date: dueDateIso,
                   },
                 ),
               )
@@ -307,7 +275,7 @@ export class CardEditorDialog implements OnInit {
                   {
                     title: model.title,
                     body: model.body || null,
-                    due_date: model.due_date || null,
+                    due_date: dueDateIso,
                   },
                 ),
               );
@@ -389,14 +357,12 @@ function initialModel(data: CardEditorDialogData): CardEditorModel {
     return {
       title: data.card.title,
       body: data.card.body ?? '',
-      due_date: data.card.due_date ?? '',
       assignee_id: '',
     };
   }
   return {
     title: '',
     body: '',
-    due_date: '',
     assignee_id: '',
   };
 }
