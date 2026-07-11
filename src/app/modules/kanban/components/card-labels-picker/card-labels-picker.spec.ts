@@ -134,4 +134,30 @@ describe('CardLabelsPicker', () => {
     expect(afterPressed).toEqual(beforePressed);
     httpMock.verify();
   });
+
+  it('does NOT issue an empty-label sync on mount when the card already has labels', async () => {
+    const bug = makeLabel({ id: 4, name: 'bug' });
+    const p1 = makeLabel({ id: 7, name: 'p1' });
+    // Mount with a card that has one label. The picker effect will fire
+    // `flush([])` ~250 ms after mount. Without the no-op guard that
+    // empty flush becomes PUT { label_ids: [] } which CLEARS the
+    // labels server-side. We assert no PUT request is issued.
+    const { fixture, host } = mountPicker({
+      card: makeCard({ labels: [bug] }),
+      userLabels: [bug, p1],
+    });
+    const httpMock = TestBed.inject(HttpTestingController);
+
+    // Wait past the 250 ms debounce + some buffer.
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    fixture.detectChanges();
+
+    httpMock.expectNone(() => true);
+    httpMock.verify();
+    // Sanity: the bug chip stays toggled on, p1 stays off.
+    const pressed = Array.from(host.querySelectorAll('app-label-chip button')).map((b) =>
+      (b as HTMLButtonElement).getAttribute('aria-pressed'),
+    );
+    expect(pressed.filter((s) => s === 'true').length).toBe(1);
+  });
 });

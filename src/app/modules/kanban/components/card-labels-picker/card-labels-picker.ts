@@ -277,12 +277,18 @@ export class CardLabelsPicker {
       // disabled flag flipped, do not fire HTTP.
       return;
     }
-    if (pending.length === 0 && this.lastCommittedIds().length === 0) {
+    // No-op guard #1: an empty `pending` only means "nothing changed
+    // since last user action" — the user's card still carries whatever
+    // `lastCommittedIds` says. Re-PUT'ing an empty `label_ids` against
+    // a card that already has labels would CLEAR the labels server-side
+    // (the backend treats `[]` as "clear all"). So we skip the request
+    // when there's nothing to flush.
+    if (pending.length === 0) {
       return;
     }
-    // If the pending set equals the last committed set, no-op. The
-    // debounce might fire even when no toggle happened (e.g. on
-    // mount) — skip in that case.
+    // No-op guard #2: if the pending set matches the last-committed
+    // set, there's nothing to change. The debounce fires after mount
+    // when the card arrives late, so this also covers that case.
     if (
       pending.length === this.lastCommittedIds().length &&
       pending.every((id) => this.lastCommittedIds().includes(id))
