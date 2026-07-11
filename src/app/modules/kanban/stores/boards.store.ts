@@ -127,23 +127,38 @@ export class BoardsStore {
     if (current === null) {
       return;
     }
-    const previousColumnId = findPreviousColumn(current, card.id, card.column_id);
-    const nextCardsByColumn: Record<string, readonly KanbanCard[]> = {
-      ...current.cardsByColumnId,
-    };
+    const nextCardsByColumn: Record<string, readonly KanbanCard[]> = {};
 
-    if (previousColumnId !== null && previousColumnId !== card.column_id) {
-      // Cross-column move: remove from source, insert into target.
-      const sourceList = (nextCardsByColumn[String(previousColumnId)] ?? []).filter(
-        (c) => c.id !== card.id,
-      );
-      nextCardsByColumn[String(previousColumnId)] = sourceList;
+    // Remove the card from every column it might be in. The cache may
+    // have drifted from the server (e.g. a previous mutation that did
+    // not finish or a state where the same card appears in multiple
+    // columns); the only safe move is to wipe all references and
+    // re-insert under the server-returned column_id. This avoids the
+    // "card appears in two columns" or "card never moved" bugs that
+    // happen when findPreviousColumn returns the wrong column.
+    let changed = false;
+    for (const [columnIdStr, cards] of Object.entries(current.cardsByColumnId)) {
+      const filtered = cards.filter((c) => c.id !== card.id);
+      if (filtered.length !== cards.length) {
+        changed = true;
+      }
+      nextCardsByColumn[columnIdStr] = filtered;
     }
 
-    const targetList = (nextCardsByColumn[String(card.column_id)] ?? []).filter(
-      (c) => c.id !== card.id,
-    );
-    nextCardsByColumn[String(card.column_id)] = [...targetList, card];
+    // Insert the card at the end of its target column. We don't sort
+    // by position locally — the server's `position` is opaque and the
+    // visual order matches what the server returned for this move.
+    const targetKey = String(card.column_id);
+    const targetList = [...(nextCardsByColumn[targetKey] ?? [])];
+    targetList.push(card);
+    nextCardsByColumn[targetKey] = targetList;
+    changed = true;
+
+    if (!changed) {
+      // Defensive: the card wasn't anywhere in the cache and we just
+      // added it under its server-returned column. Nothing else to do.
+      void card;
+    }
 
     this._currentBoard.set({
       ...current,
@@ -408,28 +423,6 @@ export class BoardsStore {
     }
     this._currentBoard.set({ ...current, columns: [...columns] });
   }
-}
-
-/**
- * Find which column the card was in before this mutation. Because the server
- * returns the *new* `column_id`, we have to search every column's card list
- * for an entry that is NOT already on the target column.
- */
-function findPreviousColumn(
-  detail: BoardDetail,
-  cardId: number,
-  targetColumnId: number,
-): number | null {
-  for (const [columnIdStr, cards] of Object.entries(detail.cardsByColumnId)) {
-    const columnId = Number(columnIdStr);
-    if (columnId === targetColumnId) {
-      continue;
-    }
-    if (cards.some((c) => c.id === cardId)) {
-      return columnId;
-    }
-  }
-  return null;
 }
 
 function toApiError(err: unknown): ApiError {

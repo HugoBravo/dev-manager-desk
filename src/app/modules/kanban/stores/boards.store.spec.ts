@@ -237,6 +237,67 @@ describe('BoardsStore', () => {
       const after = httpMock.match(() => true).length;
       expect(after).toBe(before);
     });
+
+    it('moves a card even when the cache had it in the wrong column', () => {
+      // Regression: a previous bug had findPreviousColumn return the wrong
+      // column when the cache had drifted from the server (e.g. an earlier
+      // move that did not finish). The card would stay stuck in the wrong
+      // column. The store must now trust the server-returned column_id
+      // unconditionally and place the card there.
+      //
+      // Simulate the drift: put card 87 in column 15 in the cache, even
+      // though the server will return it in column 15 anyway. The cache
+      // is already in sync — but now mutate as if a previous call had
+      // mistakenly placed it in column 12 too. We seed by hand.
+      const before = store.cardsFor(12).map((c) => c.id);
+      const beforeTarget = store.cardsFor(15).map((c) => c.id);
+      // Card 87 is in 12 originally (per sampleDetail); force the cache
+      // to also list it under 15 so it appears in two columns.
+      const current = store.currentBoard();
+      if (current === null) {
+        throw new Error('expected currentBoard to be seeded');
+      }
+      const drifted = {
+        ...current,
+        cardsByColumnId: {
+          ...current.cardsByColumnId,
+          '15': [...current.cardsByColumnId['15']!, sampleCard(87, 15, 'u')],
+        },
+      };
+      (store as unknown as { _currentBoard: { set: (v: typeof drifted) => void } })._currentBoard.set(drifted);
+
+      // Now the server says card 87 is in column 15 (canonical).
+      store.applyCardMutation({ ...sampleCard(87, 15), position: 'u' });
+
+      // Card 87 must appear EXACTLY ONCE in column 15, never in column 12.
+      expect(store.cardsFor(12).map((c) => c.id)).toEqual(before.filter((id) => id !== 87));
+      const targetIds = store.cardsFor(15).map((c) => c.id);
+      expect(targetIds.filter((id) => id === 87)).toHaveLength(1);
+      expect(targetIds).toEqual([...beforeTarget, 87]);
+    });
+
+    it('inserts the card at its server-returned column even when it is missing from the cache', () => {
+      // Edge case: the cache may not contain the card at all (e.g. a fresh
+      // page load racing with a stale move). Trust the server response and
+      // place the card under its column_id.
+      const current = store.currentBoard();
+      if (current === null) {
+        throw new Error('expected currentBoard to be seeded');
+      }
+      const stripped = {
+        ...current,
+        cardsByColumnId: {
+          ...current.cardsByColumnId,
+          '12': current.cardsByColumnId['12']!.filter((c) => c.id !== 87),
+        },
+      };
+      (store as unknown as { _currentBoard: { set: (v: typeof stripped) => void } })._currentBoard.set(stripped);
+
+      store.applyCardMutation({ ...sampleCard(87, 15), position: 'r' });
+
+      expect(store.cardsFor(12).map((c) => c.id)).not.toContain(87);
+      expect(store.cardsFor(15).map((c) => c.id)).toContain(87);
+    });
   });
 
   it('pruneLabelFromCards() strips a label from every card that carried it', async () => {
