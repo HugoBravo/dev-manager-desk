@@ -1,19 +1,12 @@
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
 
 import { API_CONFIG } from '../../../core/config/api-config';
-import type {
-  Board,
-  BoardAuditLog,
-  BulkOperationResult,
-  KanbanCard,
-  KanbanColumn,
-  KanbanLabel,
-} from '../models';
+import type { Board, BulkOperationResult, KanbanCard, KanbanColumn, KanbanLabel } from '../models';
 
-import { catchHttpError, unwrapLaravelItem, unwrapLaravelItems } from './kanban.api';
+import { catchHttpError, unwrapLaravelItem } from './kanban.api';
 
 /**
  * Payload for {@link KanbanWriteApi.createCard} (api-doc §7.3).
@@ -595,32 +588,6 @@ export class KanbanWriteApi {
       map((raw) => unwrapLaravelItem<Board>(raw)),
       catchError((err: unknown) => catchHttpError(err)),
     );
-  }
-
-  /**
-   * `GET /api/v1/projects/{p}/kanban/boards/{b}/audit?page=N` — paginated
-   * audit log for a board (api-doc §19), newest-first, page size 25.
-   * Returns a flat {@link BoardAuditLog} array (unwraps the Laravel
-   * per-row envelope).
-   *
-   * Errors:
-   * - `404` cross-owner
-   * - `401 unauth`
-   */
-  fetchBoardAudit(
-    projectId: number,
-    boardId: number,
-    page = 1,
-  ): Observable<readonly BoardAuditLog[]> {
-    const url = `${this.boardsBase(projectId)}/${boardId}/audit`;
-    return this.http
-      .get<unknown>(url, {
-        params: page > 1 ? new HttpParams().set('page', String(page)) : new HttpParams(),
-      })
-      .pipe(
-        map((raw) => unwrapLaravelItems<BoardAuditLog>(raw)),
-        catchError((err: unknown) => catchHttpError(err)),
-      );
   }
 
   /**

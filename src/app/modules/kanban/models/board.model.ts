@@ -25,7 +25,7 @@ export interface Board {
 /**
  * Wire shape of a Board audit log entry (api-doc §19, backend
  * `KanbanBoardAuditLog`). The paginated endpoint returns these in a Laravel
- * paginator envelope; {@link KanbanWriteApi.fetchBoardAudit} unwraps it.
+ * paginator envelope; {@link KanbanApi.listBoardAudit} unwraps it.
  */
 export interface BoardAuditLog {
   readonly id: number;

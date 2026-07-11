@@ -233,9 +233,9 @@ export class KanbanApi {
    * size 25. Returns a flat {@link BoardAuditLog} array (unwraps the
    * Laravel per-row envelope).
    *
-   * Symmetric with {@link KanbanWriteApi.fetchBoardAudit}: both live on
-   * the API surface so callers can `inject(KanbanApi)` for read paths
-   * without pulling in the write API. Errors: 401 unauth, 404 cross-owner.
+   * Lives on the read API surface so callers can `inject(KanbanApi)` for
+   * the audit fetch without pulling in the write API. Errors: 401
+   * unauth, 404 cross-owner.
    */
   listBoardAudit(
     projectId: number,
