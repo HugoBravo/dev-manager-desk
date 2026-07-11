@@ -10,9 +10,18 @@
 
 .board-title {
   font: var(--mat-sys-headline-medium);
-  margin: 0 0 24px 0;
+  margin: 0 0 8px 0;
   color: var(--mat-sys-on-surface);
   outline: none; /* tabindex=-1 just for focus management */
+}
+
+.board-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 16px 0;
+  margin-bottom: 24px;
+  border-bottom: 1px solid var(--mat-sys-outline-variant);
 }
 
 .archived-chip {
