@@ -52,12 +52,11 @@
 }
 
 .column-heading {
-  font: var(--mat-sys-title-small);
+  font: var(--mat-sys-title-medium);
   margin: 0;
   flex: 1 1 auto;
-  color: var(--mat-sys-on-surface-variant);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  color: var(--mat-sys-on-surface);
+  font-weight: 600;
 }
 
 .column-menu-trigger {
