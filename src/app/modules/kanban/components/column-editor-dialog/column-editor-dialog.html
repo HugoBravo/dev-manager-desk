@@ -9,13 +9,14 @@
     class="column-editor-form"
   >
     <mat-form-field appearance="outline">
-      <mat-label>Name</mat-label>
       <input
         #nameInput
         matInput
         type="text"
         autocomplete="off"
+        placeholder="Column name"
         [formField]="columnForm.name"
+        aria-label="Column name"
         aria-describedby="name-errors"
       />
       @if (columnForm.name().errors().length > 0) {
