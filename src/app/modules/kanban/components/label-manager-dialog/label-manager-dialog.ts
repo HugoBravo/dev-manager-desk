@@ -38,9 +38,14 @@ export interface LabelManagerDialogData {
  * Result returned by {@link LabelManagerDialog}. The `action` mirrors
  * what the user did so the caller can decide whether to refetch
  * downstream caches (e.g. cards that referenced a deleted label).
+ *
+ * Note: creating a label does NOT close the dialog — the user can
+ * create several labels in one session. `action: 'created'` is
+ * therefore no longer emitted through `afterClosed()`. Only the
+ * `closed`, `updated`, and `deleted` actions surface.
  */
 export interface LabelManagerDialogResult {
-  readonly action: 'closed' | 'created' | 'updated' | 'deleted';
+  readonly action: 'closed' | 'updated' | 'deleted';
   readonly label?: KanbanLabel;
 }
 
@@ -94,6 +99,7 @@ const NAME_MAX = 64;
             name="createName"
             [maxlength]="NAME_MAX"
             placeholder="New label name"
+            autocomplete="off"
             required
             aria-label="New label name"
             (keydown.enter)="onCreate($event)"
@@ -462,7 +468,11 @@ export class LabelManagerDialog {
     }
     this.createName = '';
     this.createColor = LABEL_PALETTE[0] ?? '#64748b';
-    this.ref.close({ action: 'created', label: created });
+    this.snackBar.open(`Label "${created.name}" created`, 'Dismiss', { duration: 2500 });
+    // Dialog stays open so the user can create another label in the same
+    // session without re-opening. Callers listening via afterClosed() will
+    // see action: 'closed' when the user actually closes the modal.
+    void created;
   }
 
   // --- Rename ---
