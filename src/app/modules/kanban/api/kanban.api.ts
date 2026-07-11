@@ -7,7 +7,14 @@ import { API_CONFIG } from '../../../core/config/api-config';
 import { ErrorNormalizer } from '../../../core/errors/error-normalizer';
 import type { ApiError } from '../../../core/errors/api-error';
 
-import type { Board, BoardDetail, KanbanCard, KanbanColumn, KanbanLabel } from '../models';
+import type {
+  Board,
+  BoardAuditLog,
+  BoardDetail,
+  KanbanCard,
+  KanbanColumn,
+  KanbanLabel,
+} from '../models';
 
 /**
  * Thin HttpClient wrapper around the kanban endpoints under
@@ -96,9 +103,7 @@ export class KanbanApi {
    */
   getColumn(projectId: number, boardId: number, columnId: number): Observable<KanbanColumn> {
     return this.http
-      .get<unknown>(
-        `${this.baseUrl(projectId)}/kanban/boards/${boardId}/columns/${columnId}`,
-      )
+      .get<unknown>(`${this.baseUrl(projectId)}/kanban/boards/${boardId}/columns/${columnId}`)
       .pipe(
         map((raw) => unwrapLaravelItem<KanbanColumn>(raw)),
         catchError((err: unknown) => catchHttpError(err)),
@@ -199,6 +204,53 @@ export class KanbanApi {
       map((raw) => unwrapLaravelItem<KanbanLabel>(raw)),
       catchError((err: unknown) => catchHttpError(err)),
     );
+  }
+
+  /**
+   * `GET /api/v1/projects/{project}/kanban/boards/trashed?page=...` —
+   * soft-deleted boards for a project (api-doc §16 trash), newest-deleted
+   * first. Unwraps the Laravel paginator envelope; returns a flat
+   * {@link Board} array where every entry has a non-null `deleted_at`.
+   *
+   * Used by the trash page; the active boards list endpoint excludes
+   * these by default. Cross-owner returns 404 (collapsed to `notFound`).
+   */
+  listTrashedBoards(projectId: number, page = 1): Observable<Board[]> {
+    const url = `${this.baseUrl(projectId)}/kanban/boards/trashed`;
+    return this.http
+      .get<unknown>(url, {
+        params: page > 1 ? new HttpParams().set('page', String(page)) : new HttpParams(),
+      })
+      .pipe(
+        map((raw) => unwrapLaravelItems<Board>(raw)),
+        catchError((err: unknown) => catchHttpError(err)),
+      );
+  }
+
+  /**
+   * `GET /api/v1/projects/{project}/kanban/boards/{board}/audit?page=...`
+   * — paginated audit log for a board (api-doc §19), newest-first, page
+   * size 25. Returns a flat {@link BoardAuditLog} array (unwraps the
+   * Laravel per-row envelope).
+   *
+   * Symmetric with {@link KanbanWriteApi.fetchBoardAudit}: both live on
+   * the API surface so callers can `inject(KanbanApi)` for read paths
+   * without pulling in the write API. Errors: 401 unauth, 404 cross-owner.
+   */
+  listBoardAudit(
+    projectId: number,
+    boardId: number,
+    page = 1,
+  ): Observable<readonly BoardAuditLog[]> {
+    const url = `${this.baseUrl(projectId)}/kanban/boards/${boardId}/audit`;
+    return this.http
+      .get<unknown>(url, {
+        params: page > 1 ? new HttpParams().set('page', String(page)) : new HttpParams(),
+      })
+      .pipe(
+        map((raw) => unwrapLaravelItems<BoardAuditLog>(raw)),
+        catchError((err: unknown) => catchHttpError(err)),
+      );
   }
 
   private baseUrl(projectId?: number): string {

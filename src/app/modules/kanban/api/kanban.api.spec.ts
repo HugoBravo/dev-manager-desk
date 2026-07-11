@@ -276,6 +276,104 @@ describe('KanbanApi', () => {
     });
   });
 
+  describe('listTrashedBoards()', () => {
+    it('GETs /projects/{id}/kanban/boards/trashed with no page param on the first page', async () => {
+      const promise = api.listTrashedBoards(7).toPromise();
+      const req = httpMock.expectOne(
+        (r) => r.method === 'GET' && r.url === `${FULL_PREFIX}/projects/7/kanban/boards/trashed`,
+      );
+      expect(req.request.params.has('page')).toBe(false);
+      req.flush(paginated([{ ...sampleBoard(), deleted_at: '2026-07-10T15:00:00Z' }]));
+      await expect(promise).resolves.toEqual([
+        { ...sampleBoard(), deleted_at: '2026-07-10T15:00:00Z' },
+      ]);
+    });
+
+    it('appends ?page=N when page > 1', async () => {
+      const promise = api.listTrashedBoards(7, 3).toPromise();
+      const req = httpMock.expectOne(
+        (r) => r.params.get('page') === '3' && r.url.endsWith('/boards/trashed'),
+      );
+      req.flush(paginated([]));
+      await expect(promise).resolves.toEqual([]);
+    });
+
+    it('routes 401 unauth through the normalizer', async () => {
+      const promise = api.listTrashedBoards(7).toPromise();
+      httpMock
+        .expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/trashed`)
+        .flush({ message: 'Unauthenticated.' }, { status: 401, statusText: 'Unauthorized' });
+      await expect(promise).rejects.toMatchObject({ kind: 'unauthorized' });
+    });
+
+    it('routes 404 cross-owner through the normalizer', async () => {
+      const promise = api.listTrashedBoards(7).toPromise();
+      httpMock
+        .expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/trashed`)
+        .flush({ message: 'gone' }, { status: 404, statusText: 'Not Found' });
+      await expect(promise).rejects.toMatchObject({ kind: 'notFound' });
+    });
+  });
+
+  describe('listBoardAudit()', () => {
+    it('GETs /boards/{id}/audit and unwraps the paginated envelope', async () => {
+      const promise = api.listBoardAudit(7, 4).toPromise();
+      const req = httpMock.expectOne(
+        (r) => r.url === `${FULL_PREFIX}/projects/7/kanban/boards/4/audit`,
+      );
+      expect(req.request.method).toBe('GET');
+      expect(req.request.params.has('page')).toBe(false);
+      req.flush({
+        data: [
+          {
+            data: {
+              id: 1,
+              board_id: 4,
+              actor_user_id: 7,
+              action: 'created',
+              payload: {},
+              created_at: '2026-01-01T00:00:00Z',
+            },
+          },
+        ],
+        links: { first: '', last: '', prev: null, next: null },
+        meta: {
+          current_page: 1,
+          from: 1,
+          last_page: 1,
+          per_page: 25,
+          to: 1,
+          total: 1,
+          path: '',
+        },
+      });
+      const result = await promise;
+      expect(result).toHaveLength(1);
+      expect(result?.[0]).toMatchObject({
+        id: 1,
+        board_id: 4,
+        actor_user_id: 7,
+        action: 'created',
+      });
+    });
+
+    it('routes 401 unauth through the normalizer', async () => {
+      const promise = api.listBoardAudit(7, 4).toPromise();
+      httpMock
+        .expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4/audit`)
+        .flush({ message: 'Unauthenticated.' }, { status: 401, statusText: 'Unauthorized' });
+      await expect(promise).rejects.toMatchObject({ kind: 'unauthorized' });
+    });
+
+    it('routes 404 cross-owner through the normalizer', async () => {
+      const promise = api.listBoardAudit(7, 4).toPromise();
+      httpMock
+        .expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4/audit`)
+        .flush({ message: 'gone' }, { status: 404, statusText: 'Not Found' });
+      await expect(promise).rejects.toMatchObject({ kind: 'notFound' });
+    });
+  });
+
   describe('catchHttpError (W3 wiring contract)', () => {
     it('forwards url + headers into the normalizer for 403 with X-Kanban-Realm', async () => {
       // W3 contract: catchHttpError must forward URL + response headers so
