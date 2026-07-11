@@ -55,6 +55,21 @@
       }
     </mat-form-field>
 
+    @if (isEdit()) {
+      <section class="labels-section" aria-labelledby="card-editor-labels-heading">
+        <h3 id="card-editor-labels-heading" class="labels-heading">Labels</h3>
+        <app-card-labels-picker
+          #labelsPicker
+          [card]="data.card!"
+          [userLabels]="userLabels()"
+        />
+      </section>
+    } @else {
+      <p class="labels-hint" role="note">
+        You can add labels to this card after creating it.
+      </p>
+    }
+
     @if (generalError(); as message) {
       <p class="card-editor-error" role="alert" aria-live="polite">
         {{ message }}

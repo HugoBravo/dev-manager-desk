@@ -128,6 +128,16 @@ import {
 export class CardLabelsPicker {
   readonly card = input.required<KanbanCard>();
   readonly userLabels = input.required<readonly KanbanLabel[]>();
+  /**
+   * When `true`, the picker renders chips as read-only — `onToggle()` is a
+   * no-op and the debounced flush short-circuits without issuing any HTTP
+   * request. Used by hosts that want to display the current label set
+   * without persisting changes (e.g. the create-card dialog, where the
+   * card doesn't exist on the server yet and a sync would 404).
+   *
+   * Default `false`: the picker is interactive.
+   */
+  readonly disabled = input<boolean>(false);
 
   /**
    * Emitted after a successful sync with the new label set. The
@@ -215,6 +225,12 @@ export class CardLabelsPicker {
   }
 
   protected onToggle(label: KanbanLabel): void {
+    if (this.disabled()) {
+      // Display-only mode: the host wants to show the current set without
+      // committing changes. The debounce effect also short-circuits, so
+      // no HTTP traffic is generated.
+      return;
+    }
     if (this.syncing()) {
       // A flush is in flight. Optimistically update pendingIds; the
       // effect will restart the debounce. The user's tap is buffered.
@@ -255,6 +271,12 @@ export class CardLabelsPicker {
    * 250 ms debounce in the constructor's effect.
    */
   private async flush(pending: readonly number[]): Promise<void> {
+    if (this.disabled()) {
+      // Display-only mode: the host asked us not to persist changes.
+      // Even if a stale `pendingIds` set lingers from before the
+      // disabled flag flipped, do not fire HTTP.
+      return;
+    }
     if (pending.length === 0 && this.lastCommittedIds().length === 0) {
       return;
     }

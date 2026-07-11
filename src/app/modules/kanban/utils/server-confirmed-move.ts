@@ -87,7 +87,7 @@ export interface ServerConfirmedMoveOptions<TResponse> {
  * protected readonly handleDrop = serverConfirmedMove<KanbanCard>({
  *   move: (event) =>
  *     this.writeApi.moveCard(projectId, boardId, sourceColumnId, cardId, {
- *       target_column_id: targetColumnId,
+ *       to_column_id: targetColumnId,
  *     }),
  *   onSuccess: (card, event) => this.store.applyMove(card),
  *   onError: (err, event) => this.handleMoveError(err),

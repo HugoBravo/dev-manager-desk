@@ -88,11 +88,11 @@ describe('KanbanWriteApi', () => {
   });
 
   describe('moveCard()', () => {
-    it('POSTs /cards/{card}/move with target_column_id and returns server position', async () => {
-      const promise = api.moveCard(7, 4, 12, 87, { target_column_id: 15 }).toPromise();
+    it('POSTs /cards/{card}/move with to_column_id and returns server position', async () => {
+      const promise = api.moveCard(7, 4, 12, 87, { to_column_id: 15 }).toPromise();
       const req = httpMock.expectOne(`${cardsBase(7, 4, 12)}/87/move`);
       expect(req.request.method).toBe('POST');
-      expect(req.request.body).toEqual({ target_column_id: 15 });
+      expect(req.request.body).toEqual({ to_column_id: 15 });
       req.flush({ ...sampleCard(), column_id: 15, position: 'z' });
       await expect(promise).resolves.toMatchObject({
         column_id: 15,
@@ -101,7 +101,7 @@ describe('KanbanWriteApi', () => {
     });
 
     it('routes 422 position_exhausted through the normalizer with code', async () => {
-      const promise = api.moveCard(7, 4, 12, 87, { target_column_id: 15 }).toPromise();
+      const promise = api.moveCard(7, 4, 12, 87, { to_column_id: 15 }).toPromise();
       httpMock.expectOne(`${cardsBase(7, 4, 12)}/87/move`).flush(
         {
           message: 'Server ran out of room to position items.',
@@ -122,7 +122,7 @@ describe('KanbanWriteApi', () => {
       // with a pre-resolved value. The caller cannot read `position` until
       // the HTTP response lands.
       let resolved = false;
-      const result = api.moveCard(7, 4, 12, 87, { target_column_id: 15 });
+      const result = api.moveCard(7, 4, 12, 87, { to_column_id: 15 });
       // Subscribe first so HttpClient issues the request.
       const subscription = result.subscribe(() => {
         resolved = true;
@@ -271,6 +271,125 @@ describe('KanbanWriteApi', () => {
         kind: 'validation',
         fieldErrors: { 'label_ids.1': ['The selected label_ids.1 is invalid.'] },
       });
+    });
+  });
+
+  describe('column CRUD', () => {
+    const sampleColumn = (id = 21) => ({
+      id,
+      board_id: 4,
+      name: `Column ${id}`,
+      position: 'a',
+      archived_at: null,
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    });
+
+    const columnsBase = (projectId: number, boardId: number) =>
+      `${FULL_PREFIX}/projects/${projectId}/kanban/boards/${boardId}/columns`;
+
+    it('createColumn POSTs /columns with { name } and returns the new column', async () => {
+      const promise = api.createColumn(7, 4, { name: 'Backlog' }).toPromise();
+      const req = httpMock.expectOne(columnsBase(7, 4));
+      expect(req.request.method).toBe('POST');
+      expect(req.request.body).toEqual({ name: 'Backlog' });
+      req.flush(sampleColumn(21));
+      await expect(promise).resolves.toEqual(sampleColumn(21));
+    });
+
+    it('updateColumn PATCHes /columns/{c} with the partial body (rename)', async () => {
+      const promise = api.updateColumn(7, 4, 21, { name: 'Renamed' }).toPromise();
+      const req = httpMock.expectOne(`${columnsBase(7, 4)}/21`);
+      expect(req.request.method).toBe('PATCH');
+      expect(req.request.body).toEqual({ name: 'Renamed' });
+      req.flush({ ...sampleColumn(21), name: 'Renamed' });
+      await expect(promise).resolves.toMatchObject({ name: 'Renamed' });
+    });
+
+    it('updateColumn PATCHes /columns/{c} with archived_at: null for unarchive', async () => {
+      const promise = api.updateColumn(7, 4, 21, { archived_at: null }).toPromise();
+      const req = httpMock.expectOne(`${columnsBase(7, 4)}/21`);
+      expect(req.request.method).toBe('PATCH');
+      expect(req.request.body).toEqual({ archived_at: null });
+      req.flush({ ...sampleColumn(21), archived_at: null });
+      await expect(promise).resolves.toMatchObject({ archived_at: null });
+    });
+
+    it('updateColumn routes 409 column_has_contents through the normalizer', async () => {
+      const promise = api.updateColumn(7, 4, 21, { archived_at: '2026-07-07T00:00:00Z' }).toPromise();
+      httpMock
+        .expectOne(`${columnsBase(7, 4)}/21`)
+        .flush(
+          {
+            message: 'Cannot archive a column that still has cards.',
+            code: 'column_has_contents',
+            column_id: 21,
+          },
+          { status: 409, statusText: 'Conflict' },
+        );
+      const captured = (await promise.catch((e: ApiError) => e)) as ApiError;
+      expect(captured.kind).toBe('conflict');
+      if (captured.kind === 'conflict') {
+        expect(captured.code).toBe('column_has_contents');
+      }
+    });
+
+    it('deleteColumn DELETEs /columns/{c} and returns void on 204', async () => {
+      const promise = api.deleteColumn(7, 4, 21).toPromise();
+      const req = httpMock.expectOne(`${columnsBase(7, 4)}/21`);
+      expect(req.request.method).toBe('DELETE');
+      req.flush(null, { status: 204, statusText: 'No Content' });
+      await expect(promise).resolves.toBeUndefined();
+    });
+
+    it('deleteColumn routes 409 column_has_contents through the normalizer', async () => {
+      const promise = api.deleteColumn(7, 4, 21).toPromise();
+      httpMock
+        .expectOne(`${columnsBase(7, 4)}/21`)
+        .flush(
+          {
+            message: 'This column still has cards.',
+            code: 'column_has_contents',
+            column_id: 21,
+          },
+          { status: 409, statusText: 'Conflict' },
+        );
+      const captured = (await promise.catch((e: ApiError) => e)) as ApiError;
+      expect(captured.kind).toBe('conflict');
+      if (captured.kind === 'conflict') {
+        expect(captured.code).toBe('column_has_contents');
+      }
+    });
+
+    it('reorderColumns POSTs /columns/reorder with { ordered_ids } and unwraps the result', async () => {
+      const promise = api.reorderColumns(7, 4, [21, 15, 12]).toPromise();
+      const req = httpMock.expectOne(`${columnsBase(7, 4)}/reorder`);
+      expect(req.request.method).toBe('POST');
+      expect(req.request.body).toEqual({ ordered_ids: [21, 15, 12] });
+      req.flush({ reordered: 3 });
+      await expect(promise).resolves.toEqual({ reordered: 3 });
+    });
+
+    it('reorderColumns spreads a readonly array into the request body', async () => {
+      // `readonly number[]` survives the `let ordered_ids = [...orderedIds]`
+      // step (no mutation) — confirm the wire shape matches what the
+      // backend expects (NOT `Object`).
+      const ids = Object.freeze([21, 15, 12]) as readonly number[];
+      const promise = api.reorderColumns(7, 4, ids).toPromise();
+      const req = httpMock.expectOne(`${columnsBase(7, 4)}/reorder`);
+      expect(req.request.body).toEqual({ ordered_ids: [21, 15, 12] });
+      req.flush({ reordered: 3 });
+      await expect(promise).resolves.toEqual({ reordered: 3 });
+    });
+
+    it('moveColumn POSTs /columns/{c}/move with { to_board_id } and returns the column', async () => {
+      const promise = api.moveColumn(7, 4, 21, 9).toPromise();
+      const req = httpMock.expectOne(`${columnsBase(7, 4)}/21/move`);
+      expect(req.request.method).toBe('POST');
+      expect(req.request.body).toEqual({ to_board_id: 9 });
+      const moved = { ...sampleColumn(21), board_id: 9 };
+      req.flush(moved);
+      await expect(promise).resolves.toEqual(moved);
     });
   });
 });

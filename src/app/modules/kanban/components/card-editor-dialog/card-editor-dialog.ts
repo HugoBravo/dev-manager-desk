@@ -1,4 +1,12 @@
-import { Component, computed, effect, inject, signal } from '@angular/core';
+import {
+  AfterViewInit,
+  Component,
+  computed,
+  effect,
+  inject,
+  signal,
+  viewChild,
+} from '@angular/core';
 import {
   FormField,
   form,
@@ -25,6 +33,8 @@ import type { ApiError } from '../../../../core/errors/api-error';
 import type { KanbanCard } from '../../models';
 import { KanbanWriteApi } from '../../api/kanban-write.api';
 import { BoardsStore } from '../../stores/boards.store';
+import { LabelsStore } from '../../stores/labels.store';
+import { CardLabelsPicker } from '../card-labels-picker/card-labels-picker';
 
 /**
  * Editor payload for a card (matches api-doc §7.3 create + §7.4 update).
@@ -89,6 +99,7 @@ const BODY_MAX = 65535; // backend limit per api-doc §7.3.
   selector: 'app-card-editor-dialog',
   imports: [
     FormField,
+    CardLabelsPicker,
     MatButtonModule,
     MatDialogModule,
     MatFormFieldModule,
@@ -103,13 +114,28 @@ const BODY_MAX = 65535; // backend limit per api-doc §7.3.
     '[attr.aria-labelledby]': "'card-editor-title'",
   },
 })
-export class CardEditorDialog {
-  private readonly data = inject<CardEditorDialogData>(MAT_DIALOG_DATA);
+export class CardEditorDialog implements AfterViewInit {
+  // `protected` so the template can bind `data.card!` (the edit-mode inline
+  // label picker needs the prefilled card). Other fields stay `private`.
+  protected readonly data = inject<CardEditorDialogData>(MAT_DIALOG_DATA);
   private readonly ref =
     inject<MatDialogRef<CardEditorDialog, CardEditorDialogResult>>(MatDialogRef);
   private readonly writeApi = inject(KanbanWriteApi);
   private readonly store = inject(BoardsStore);
+  private readonly labelsStore = inject(LabelsStore);
   private readonly snackBar = inject(MatSnackBar);
+
+  /**
+   * Reference to the inline picker in edit mode. The picker needs the
+   * full project/board/column chain to issue the labels-sync PUT, and
+   * {@link CardLabelsPicker.setChain} is the documented hand-off for that
+   * context. We call it once the view is ready; the picker is only
+   * present when `data.mode === 'edit'` so the viewChild is undefined in
+   * create mode and `setChain` is skipped.
+   */
+  private readonly pickerRef = viewChild<CardLabelsPicker>('labelsPicker');
+  protected readonly userLabels = computed(() => this.labelsStore.labels());
+  protected readonly isEdit = computed(() => this.data.mode === 'edit');
 
   protected readonly title = computed(() =>
     this.data.mode === 'create' ? 'Create card' : 'Edit card',
@@ -174,6 +200,28 @@ export class CardEditorDialog {
       // dependency. The validation closures already read from
       // `serverFieldErrors` on each pass.
       void this.cardForm().value();
+    });
+    // Ensure the user's label library is loaded so the picker chips render
+    // immediately on edit-mode open. `ensureLoaded()` is idempotent — it
+    // short-circuits if the cache was already populated. In create mode
+    // the picker is hidden (see template), but the load is harmless and
+    // keeps the data ready for the next dialog open.
+    void this.labelsStore.ensureLoaded();
+  }
+
+  ngAfterViewInit(): void {
+    // Wire the picker's chain context. The host has the project/board/column
+    // ids from `MAT_DIALOG_DATA`; the picker needs them to call the
+    // labels-sync endpoint. We bind them via the documented hand-off —
+    // `CardLabelsPicker.setChain` — rather than widening the input API.
+    if (this.data.mode !== 'edit') {
+      return;
+    }
+    queueMicrotask(() => {
+      const picker = this.pickerRef();
+      if (picker) {
+        picker.setChain(this.data.projectId, this.data.boardId, this.data.columnId);
+      }
     });
   }
 

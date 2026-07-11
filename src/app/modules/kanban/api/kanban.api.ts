@@ -85,6 +85,27 @@ export class KanbanApi {
   }
 
   /**
+   * `GET /api/v1/projects/{project}/kanban/boards/{board}/columns/{column}` —
+   * bare single column (api-doc §6.3). Returns the {@link KanbanColumn}
+   * resource with the canonical `archived_at` and `position`. Unwraps
+   * the Laravel per-resource envelope.
+   *
+   * Useful for refresh-after-mutation (one column's `position` /
+   * `archived_at` changed) when the caller wants to avoid refetching
+   * the whole `getBoardDetail` payload.
+   */
+  getColumn(projectId: number, boardId: number, columnId: number): Observable<KanbanColumn> {
+    return this.http
+      .get<unknown>(
+        `${this.baseUrl(projectId)}/kanban/boards/${boardId}/columns/${columnId}`,
+      )
+      .pipe(
+        map((raw) => unwrapLaravelItem<KanbanColumn>(raw)),
+        catchError((err: unknown) => catchHttpError(err)),
+      );
+  }
+
+  /**
    * `GET /api/v1/projects/{project}/kanban/boards/{board}/columns/{column}/cards`
    * — bare cards in a column (api-doc §7.1), ordered by position ASC.
    * Unwraps the Laravel per-resource envelope.

@@ -66,6 +66,18 @@
         <mat-card-content>
           <p>Create columns to start organizing cards.</p>
         </mat-card-content>
+        <mat-card-actions>
+          <button
+            mat-stroked-button
+            type="button"
+            class="add-column-button"
+            (click)="openAddColumn($any($event.currentTarget))"
+            aria-label="Add column"
+          >
+            <mat-icon aria-hidden="true">add</mat-icon>
+            Add column
+          </button>
+        </mat-card-actions>
       </mat-card>
     } @else {
       <div class="columns-grid" cdkDropListGroup aria-label="Board columns">
@@ -74,13 +86,70 @@
             class="column"
             role="region"
             [attr.aria-labelledby]="columnHeadingId(column.id)"
+            [class.column-archived]="column.archived_at"
             cdkDropList
             [cdkDropListData]="{ columnId: column.id }"
             (cdkDropListDropped)="onCardDrop($any($event))"
           >
-            <h2 [id]="columnHeadingId(column.id)" class="column-heading">
-              {{ column.name }}
-            </h2>
+            <header class="column-header">
+              <h2 [id]="columnHeadingId(column.id)" class="column-heading">
+                {{ column.name }}
+                @if (column.archived_at) {
+                  <span class="archived-chip">(archived)</span>
+                }
+              </h2>
+              <button
+                mat-icon-button
+                type="button"
+                class="column-menu-trigger"
+                [attr.aria-label]="'Column menu ' + column.name"
+                [matMenuTriggerFor]="columnMenu"
+                (click)="$any($event).stopPropagation()"
+              >
+                <mat-icon aria-hidden="true">more_vert</mat-icon>
+              </button>
+              <mat-menu #columnMenu="matMenu">
+                <button
+                  mat-menu-item
+                  type="button"
+                  (click)="openRenameColumn(column, $any($event.currentTarget))"
+                  aria-label="Rename column"
+                >
+                  <mat-icon aria-hidden="true">edit</mat-icon>
+                  <span>Rename</span>
+                </button>
+                @if (!column.archived_at) {
+                  <button
+                    mat-menu-item
+                    type="button"
+                    (click)="archiveColumn(column)"
+                    [attr.aria-label]="'Archive column ' + column.name"
+                  >
+                    <mat-icon aria-hidden="true">archive</mat-icon>
+                    <span>Archive</span>
+                  </button>
+                } @else {
+                  <button
+                    mat-menu-item
+                    type="button"
+                    (click)="unarchiveColumn(column)"
+                    [attr.aria-label]="'Unarchive column ' + column.name"
+                  >
+                    <mat-icon aria-hidden="true">unarchive</mat-icon>
+                    <span>Unarchive</span>
+                  </button>
+                }
+                <button
+                  mat-menu-item
+                  type="button"
+                  (click)="deleteColumn(column)"
+                  [attr.aria-label]="'Delete column ' + column.name"
+                >
+                  <mat-icon aria-hidden="true">delete</mat-icon>
+                  <span>Delete</span>
+                </button>
+              </mat-menu>
+            </header>
             @if (cardsFor(column.id).length === 0) {
               <p class="column-empty">No cards in this column</p>
             } @else {
@@ -131,6 +200,16 @@
             </button>
           </section>
         }
+        <button
+          mat-stroked-button
+          type="button"
+          class="add-column-card"
+          (click)="openAddColumn($any($event.currentTarget))"
+          aria-label="Add column"
+        >
+          <mat-icon aria-hidden="true">add</mat-icon>
+          Add column
+        </button>
       </div>
     }
   }

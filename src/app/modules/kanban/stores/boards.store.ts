@@ -301,6 +301,113 @@ export class BoardsStore {
     }
     return current.cardsByColumnId[String(columnId)] ?? [];
   }
+
+  // --- Column mutation helpers (commit 3) ---
+
+  /**
+   * Append a server-returned column to the current board's column list
+   * and seed an empty card map entry for it. The server returns the
+   * canonical `position`; the page renders columns in array order.
+   *
+   * No-op if the current board is `null` (the caller should refresh via
+   * `loadBoard()` to adopt the new column into the cache).
+   */
+  applyColumnCreated(column: KanbanColumn): void {
+    const current = this._currentBoard();
+    if (current === null) {
+      return;
+    }
+    if (current.columns.some((c) => c.id === column.id)) {
+      // Idempotent: a column with this id is already in the cache. Treat
+      // as an update instead of an append so we don't double-render.
+      this.applyColumnUpdated(column);
+      return;
+    }
+    const nextCardsByColumn: Record<string, readonly KanbanCard[]> = {
+      ...current.cardsByColumnId,
+      [String(column.id)]: [],
+    };
+    this._currentBoard.set({
+      ...current,
+      columns: [...current.columns, column],
+      cardsByColumnId: nextCardsByColumn,
+    });
+  }
+
+  /**
+   * Replace the column matching `column.id` in the current cache. Used
+   * after rename / archive / restore / move / reorder-refresh so the UI
+   * reflects the server-computed `position`, `archived_at`, etc.
+   *
+   * No-op if no column with the id exists in the cache OR if the cache
+   * is unloaded. Callers that hit the unloaded branch should fall back
+   * to `loadBoard()` so the next render reflects the change.
+   */
+  applyColumnUpdated(column: KanbanColumn): void {
+    const current = this._currentBoard();
+    if (current === null) {
+      return;
+    }
+    let changed = false;
+    const nextColumns = current.columns.map((c) => {
+      if (c.id !== column.id) {
+        return c;
+      }
+      changed = true;
+      return column;
+    });
+    if (!changed) {
+      return;
+    }
+    this._currentBoard.set({ ...current, columns: nextColumns });
+  }
+
+  /**
+   * Remove a column (and its card map) from the current cache. Used
+   * after a successful DELETE; the server cascades any FK references.
+   * All cards under the removed column are dropped — they're gone with
+   * the column on the server (404 returns for the cards' column_id).
+   *
+   * No-op if no column with the id exists OR if the cache is unloaded.
+   */
+  applyColumnRemoved(columnId: number): void {
+    const current = this._currentBoard();
+    if (current === null) {
+      return;
+    }
+    const nextColumns = current.columns.filter((c) => c.id !== columnId);
+    if (nextColumns.length === current.columns.length) {
+      return;
+    }
+    const nextCardsByColumn: Record<string, readonly KanbanCard[]> = {};
+    for (const [key, cards] of Object.entries(current.cardsByColumnId)) {
+      if (Number(key) === columnId) {
+        continue;
+      }
+      nextCardsByColumn[key] = cards;
+    }
+    this._currentBoard.set({
+      ...current,
+      columns: nextColumns,
+      cardsByColumnId: nextCardsByColumn,
+    });
+  }
+
+  /**
+   * Replace the entire column array with the supplied list. Card maps
+   * stay untouched — the column ids are preserved, only their order /
+   * identity in the list changes. Used after a successful reorder
+   * (api-doc §6.6) where the server returns a count, not the list — the
+   * caller refetches via {@link KanbanApi.listColumns} and commits the
+   * result through this method.
+   */
+  replaceColumnOrder(columns: readonly KanbanColumn[]): void {
+    const current = this._currentBoard();
+    if (current === null) {
+      return;
+    }
+    this._currentBoard.set({ ...current, columns: [...columns] });
+  }
 }
 
 /**

@@ -18,6 +18,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatDialog } from '@angular/material/dialog';
 import { MatIconModule } from '@angular/material/icon';
+import { MatMenuModule } from '@angular/material/menu';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar } from '@angular/material/snack-bar';
 
@@ -36,6 +37,11 @@ import {
   type CardEditorDialogData,
   type CardEditorDialogResult,
 } from '../components/card-editor-dialog/card-editor-dialog';
+import {
+  ColumnEditorDialog,
+  type ColumnEditorDialogData,
+  type ColumnEditorDialogResult,
+} from '../components/column-editor-dialog/column-editor-dialog';
 import { CardLabelsStrip } from '../components/card-labels-strip/card-labels-strip';
 import {
   LabelManagerDialog,
@@ -73,6 +79,7 @@ import { serverConfirmedMove } from '../utils/server-confirmed-move';
     MatButtonModule,
     MatCardModule,
     MatIconModule,
+    MatMenuModule,
     MatProgressSpinnerModule,
     CardLabelsStrip,
   ],
@@ -208,7 +215,7 @@ export class BoardDetailPage implements AfterViewInit {
       const targetContainer = event.container.data as { columnId: number } | undefined;
       const targetColumnId = targetContainer?.columnId ?? card.column_id;
       return this.writeApi.moveCard(projectIdNum, boardIdNum, card.column_id, card.id, {
-        target_column_id: targetColumnId,
+        to_column_id: targetColumnId,
       });
     },
     onSuccess: (card) => {
@@ -328,6 +335,214 @@ export class BoardDetailPage implements AfterViewInit {
     void firstValueFrom(ref.afterClosed()).then(() => {
       triggerElement.focus();
     });
+  }
+
+  // --- Column management (commit 3) ---
+
+  /**
+   * Open the column editor in `create` mode. Triggered by the
+   * "+ Add column" affordance at the right edge of the columns row.
+   */
+  protected openAddColumn(triggerElement: HTMLElement): void {
+    const data: ColumnEditorDialogData = { mode: 'create', triggerElement };
+    const ref = this.dialog.open<
+      ColumnEditorDialog,
+      ColumnEditorDialogData,
+      ColumnEditorDialogResult
+    >(ColumnEditorDialog, { data });
+    void firstValueFrom(ref.afterClosed()).then((result) => {
+      // Return focus regardless of outcome (WCAG AA focus management).
+      triggerElement.focus();
+      if (!result || result.action !== 'saved' || !result.name) {
+        return;
+      }
+      void this.createColumn(result.name);
+    });
+  }
+
+  /**
+   * Open the column editor in `rename` mode. Triggered from the
+   * per-column menu's "Rename" entry.
+   */
+  protected openRenameColumn(column: KanbanColumn, triggerElement: HTMLElement): void {
+    const data: ColumnEditorDialogData = {
+      mode: 'rename',
+      initialName: column.name,
+      triggerElement,
+    };
+    const ref = this.dialog.open<
+      ColumnEditorDialog,
+      ColumnEditorDialogData,
+      ColumnEditorDialogResult
+    >(ColumnEditorDialog, { data });
+    void firstValueFrom(ref.afterClosed()).then((result) => {
+      triggerElement.focus();
+      if (!result || result.action !== 'saved' || !result.name) {
+        return;
+      }
+      if (result.name === column.name) {
+        return;
+      }
+      void this.renameColumn(column, result.name);
+    });
+  }
+
+  /**
+   * Archive a column by setting `archived_at = now` server-side. The
+   * server returns the updated resource; we commit via
+   * {@link BoardsStore.applyColumnUpdated} and surface a snackbar.
+   */
+  protected archiveColumn(column: KanbanColumn): void {
+    const projectIdNum = parseId(this.projectId());
+    const boardIdNum = parseId(this.boardId());
+    if (projectIdNum === null || boardIdNum === null) {
+      return;
+    }
+    void this.safeColumnWrite(
+      this.writeApi.updateColumn(projectIdNum, boardIdNum, column.id, {
+        archived_at: new Date().toISOString(),
+      }),
+    ).then((updated) => {
+      if (updated !== null) {
+        this.snackBar.open('Archived', 'Dismiss', { duration: 2000 });
+      }
+    });
+  }
+
+  /**
+   * Unarchive a column by setting `archived_at = null`.
+   */
+  protected unarchiveColumn(column: KanbanColumn): void {
+    const projectIdNum = parseId(this.projectId());
+    const boardIdNum = parseId(this.boardId());
+    if (projectIdNum === null || boardIdNum === null) {
+      return;
+    }
+    void this.safeColumnWrite(
+      this.writeApi.updateColumn(projectIdNum, boardIdNum, column.id, {
+        archived_at: null,
+      }),
+    ).then((updated) => {
+      if (updated !== null) {
+        this.snackBar.open('Restored', 'Dismiss', { duration: 2000 });
+      }
+    });
+  }
+
+  /**
+   * Delete a column. Confirms via `window.confirm` first. On 409
+   * `column_has_contents`, surfaces a snackbar with the localized
+   * message; on other errors, falls back to the normalizer.
+   */
+  protected deleteColumn(column: KanbanColumn): void {
+    const projectIdNum = parseId(this.projectId());
+    const boardIdNum = parseId(this.boardId());
+    if (projectIdNum === null || boardIdNum === null) {
+      return;
+    }
+    // Browser-native confirmation step. Window.confirm is sufficient
+    // for this destructive action — Material's confirm dialog would
+    // require managing focus across a third dialog layer.
+    const confirmed = window.confirm(
+      `Delete column "${column.name}"? Cards in it must be moved first.`,
+    );
+    if (!confirmed) {
+      return;
+    }
+    void firstValueFrom(
+      this.writeApi.deleteColumn(projectIdNum, boardIdNum, column.id),
+    )
+      .then(() => {
+        this.store.applyColumnRemoved(column.id);
+        this.snackBar.open('Deleted', 'Dismiss', { duration: 2000 });
+      })
+      .catch((err: unknown) => {
+        const apiError = err as ApiError | unknown;
+        if (
+          apiError &&
+          typeof apiError === 'object' &&
+          'kind' in apiError &&
+          (apiError as ApiError).kind === 'conflict'
+        ) {
+          this.snackBar.open(
+            'This column has cards. Move or delete them first.',
+            'Dismiss',
+            { duration: 4000 },
+          );
+          return;
+        }
+        this.snackBar.open(
+          err &&
+            typeof err === 'object' &&
+            'kind' in err
+            ? ErrorNormalizer.toUserMessage(err as ApiError)
+            : 'Could not delete the column. Please try again.',
+          'Dismiss',
+          { duration: 4000 },
+        );
+      });
+  }
+
+  /**
+   * Internal: POST a new column on success, commit to the store, and
+   * surface a snackbar.
+   */
+  private async createColumn(name: string): Promise<void> {
+    const projectIdNum = parseId(this.projectId());
+    const boardIdNum = parseId(this.boardId());
+    if (projectIdNum === null || boardIdNum === null) {
+      return;
+    }
+    const created = await this.safeColumnWrite(
+      this.writeApi.createColumn(projectIdNum, boardIdNum, { name }),
+    );
+    if (created !== null) {
+      this.store.applyColumnCreated(created);
+      this.snackBar.open(`Added '${created.name}'`, 'Dismiss', { duration: 2000 });
+    }
+  }
+
+  /**
+   * Internal: PATCH a column with a new name, commit to the store,
+   * and surface a snackbar.
+   */
+  private async renameColumn(column: KanbanColumn, name: string): Promise<void> {
+    const projectIdNum = parseId(this.projectId());
+    const boardIdNum = parseId(this.boardId());
+    if (projectIdNum === null || boardIdNum === null) {
+      return;
+    }
+    const updated = await this.safeColumnWrite(
+      this.writeApi.updateColumn(projectIdNum, boardIdNum, column.id, { name }),
+    );
+    if (updated !== null) {
+      this.store.applyColumnUpdated(updated);
+      this.snackBar.open(`Renamed to '${updated.name}'`, 'Dismiss', { duration: 2000 });
+    }
+  }
+
+  /**
+   * Run a write against the columns endpoint. Returns the
+   * server-returned resource on success, or `null` if the write failed
+   * (with a snackbar fired). The caller branches on the result to
+   * commit (success) or skip (failure).
+   */
+  private async safeColumnWrite(
+    obs: ReturnType<KanbanWriteApi['createColumn']>,
+  ): Promise<KanbanColumn | null> {
+    try {
+      return await firstValueFrom(obs);
+    } catch (err) {
+      const apiError = err as ApiError | unknown;
+      this.snackBar.open(
+        apiError && typeof apiError === 'object' && 'kind' in apiError
+          ? ErrorNormalizer.toUserMessage(apiError as ApiError)
+          : 'Could not save the column. Please try again.',
+        'Dismiss',
+        { duration: 4000 },
+      );
+      return null;
+    }
   }
 
   protected cardsFor(columnId: number): readonly KanbanCard[] {

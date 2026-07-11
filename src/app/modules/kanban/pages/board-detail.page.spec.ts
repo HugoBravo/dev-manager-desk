@@ -161,6 +161,74 @@ describe('BoardDetailPage', () => {
     expect(host.querySelectorAll('.card').length).toBe(1);
   });
 
+  it('renders a per-column menu trigger and an Add column affordance', async () => {
+    const fixture = createComponent();
+    const httpMock = TestBed.inject(HttpTestingController);
+    const promise = fixture.whenStable();
+    await flushDetail(httpMock, 7, 4, sampleBoard(), [sampleColumn(12), sampleColumn(13)], {
+      12: [],
+      13: [],
+    });
+    fixture.detectChanges();
+    await promise;
+
+    const host = fixture.nativeElement as HTMLElement;
+    // One menu trigger per column header.
+    const menuTriggers = host.querySelectorAll('.column-menu-trigger');
+    expect(menuTriggers.length).toBe(2);
+    // Add-column affordance is rendered at the row's tail.
+    const addCol = host.querySelector('button[aria-label="Add column"]');
+    expect(addCol).not.toBeNull();
+  });
+
+  it('opens the ColumnEditorDialog when Add column is clicked', async () => {
+    const fixture = createComponent();
+    const httpMock = TestBed.inject(HttpTestingController);
+    const promise = fixture.whenStable();
+    await flushDetail(httpMock, 7, 4, sampleBoard(), [sampleColumn(12)], { 12: [] });
+    fixture.detectChanges();
+    await promise;
+
+    const addCol = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(
+      'button[aria-label="Add column"]',
+    )!;
+    addCol.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const editorHost = document.body.querySelector('app-column-editor-dialog');
+    expect(editorHost).not.toBeNull();
+    expect(editorHost?.textContent).toContain('New column');
+  });
+
+  it('exposes a Rename entry inside the per-column menu', async () => {
+    const fixture = createComponent();
+    const httpMock = TestBed.inject(HttpTestingController);
+    const promise = fixture.whenStable();
+    await flushDetail(httpMock, 7, 4, sampleBoard(), [sampleColumn(12)], { 12: [] });
+    fixture.detectChanges();
+    await promise;
+
+    // Open the per-column menu by clicking the trigger button.
+    const trigger = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(
+      '.column-menu-trigger',
+    )!;
+    trigger.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    // The MatMenu overlay portal mounts into the CDK overlay container,
+    // which is detached from the host fixture's native element. Look in
+    // the whole document for the Rename / Archive / Delete entries.
+    const renameItem = document.body.querySelector('button[aria-label="Rename column"]');
+    const archiveItem = document.body.querySelector('button[aria-label^="Archive column"]');
+    const deleteItem = document.body.querySelector('button[aria-label^="Delete column"]');
+    expect(renameItem).not.toBeNull();
+    expect(archiveItem).not.toBeNull();
+    expect(deleteItem).not.toBeNull();
+  });
+
   it('renders the empty-board message when there are no columns', async () => {
     const fixture = createComponent();
     const httpMock = TestBed.inject(HttpTestingController);
@@ -281,7 +349,7 @@ describe('BoardDetailPage', () => {
 
     const moveReq = httpMock.expectOne(moveBaseUrl);
     expect(moveReq.request.method).toBe('POST');
-    expect(moveReq.request.body).toEqual({ target_column_id: 13 });
+    expect(moveReq.request.body).toEqual({ to_column_id: 13 });
 
     // 422 position_exhausted must surface through W3 so the page can branch.
     moveReq.flush(

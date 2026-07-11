@@ -4,7 +4,7 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 
 import { API_CONFIG } from '../../../core/config/api-config';
 import { KanbanApi } from '../api/kanban.api';
-import type { BoardDetail, KanbanCard } from '../models';
+import type { BoardDetail, KanbanCard, KanbanColumn } from '../models';
 import { BoardsStore } from './boards.store';
 
 const API_BASE_URL = 'http://localhost:8000/api';
@@ -330,6 +330,179 @@ describe('BoardsStore', () => {
     expect(store.cardsFor(12).map((c) => c.id)).toEqual([88]);
     // Other column untouched.
     expect(store.cardsFor(15).map((c) => c.id)).toEqual([89]);
+  });
+
+  // --- Column mutation helpers (commit 3) ---
+
+  /** Render a fresh `KanbanColumn` with the given overrides. */
+  const sampleColumn = (overrides: Partial<KanbanColumn> = {}): KanbanColumn => ({
+    id: 99,
+    board_id: 4,
+    name: 'New column',
+    position: 'n',
+    archived_at: null,
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:00:00Z',
+    ...overrides,
+  });
+
+  /** Drive a standard `loadBoard()` so the store has data to mutate. */
+  async function loadSampleDetail(): Promise<void> {
+    const promise = store.loadBoard(7, 4);
+    httpMock.expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4`).flush(sampleDetail.board);
+    httpMock
+      .expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4/columns`)
+      .flush({
+        data: sampleDetail.columns,
+        links: { first: '', last: '', prev: null, next: null },
+        meta: {
+          current_page: 1,
+          from: 1,
+          last_page: 1,
+          per_page: 25,
+          to: 2,
+          total: 2,
+          path: '',
+        },
+      });
+    httpMock
+      .expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4/columns/12/cards`)
+      .flush({
+        data: sampleDetail.cardsByColumnId['12'],
+        links: { first: '', last: '', prev: null, next: null },
+        meta: {
+          current_page: 1,
+          from: 1,
+          last_page: 1,
+          per_page: 25,
+          to: 2,
+          total: 2,
+          path: '',
+        },
+      });
+    httpMock
+      .expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4/columns/15/cards`)
+      .flush({
+        data: sampleDetail.cardsByColumnId['15'],
+        links: { first: '', last: '', prev: null, next: null },
+        meta: {
+          current_page: 1,
+          from: 1,
+          last_page: 1,
+          per_page: 25,
+          to: 1,
+          total: 1,
+          path: '',
+        },
+      });
+    await promise;
+  }
+
+  describe('applyColumnCreated()', () => {
+    it('appends the column and seeds an empty card map entry', async () => {
+      await loadSampleDetail();
+      const created = sampleColumn({ id: 99, name: 'Backlog' });
+      store.applyColumnCreated(created);
+
+      const detail = store.currentBoard();
+      expect(detail).not.toBeNull();
+      expect(detail!.columns.map((c) => c.id)).toEqual([12, 15, 99]);
+      expect(detail!.columns[2]?.name).toBe('Backlog');
+      // New column has no cards.
+      expect(store.cardsFor(99)).toEqual([]);
+    });
+
+    it('is idempotent — repeat calls do not duplicate the column', async () => {
+      await loadSampleDetail();
+      const column = sampleColumn({ id: 12, name: 'In Progress' });
+      store.applyColumnCreated(column);
+      // Existing column was updated, not duplicated.
+      expect(store.currentBoard()!.columns.map((c) => c.id)).toEqual([12, 15]);
+      expect(store.currentBoard()!.columns[0]?.name).toBe('In Progress');
+    });
+
+    it('is a no-op when no board is loaded', () => {
+      expect(store.currentBoard()).toBeNull();
+      store.applyColumnCreated(sampleColumn());
+      expect(store.currentBoard()).toBeNull();
+    });
+  });
+
+  describe('applyColumnUpdated()', () => {
+    it('replaces the matching column in place by id', async () => {
+      await loadSampleDetail();
+      const renamed = sampleColumn({ id: 12, name: 'Doing' });
+      store.applyColumnUpdated(renamed);
+
+      const cols = store.currentBoard()!.columns;
+      expect(cols.find((c) => c.id === 12)?.name).toBe('Doing');
+      // Order preserved.
+      expect(cols.map((c) => c.id)).toEqual([12, 15]);
+    });
+
+    it('is a no-op when the column id is unknown (refetch instead)', async () => {
+      await loadSampleDetail();
+      const before = JSON.stringify(store.currentBoard());
+      store.applyColumnUpdated(sampleColumn({ id: 999 }));
+      const after = JSON.stringify(store.currentBoard());
+      expect(after).toBe(before);
+    });
+
+    it('is a no-op when no board is loaded', () => {
+      expect(store.currentBoard()).toBeNull();
+      store.applyColumnUpdated(sampleColumn());
+      expect(store.currentBoard()).toBeNull();
+    });
+  });
+
+  describe('applyColumnRemoved()', () => {
+    it('removes the column and its card map entry', async () => {
+      await loadSampleDetail();
+      store.applyColumnRemoved(12);
+      const cols = store.currentBoard()!.columns;
+      expect(cols.map((c) => c.id)).toEqual([15]);
+      // 12's card map is gone — 15's is preserved.
+      expect(store.cardsFor(12)).toEqual([]);
+      expect(store.cardsFor(15).map((c) => c.id)).toEqual([89]);
+    });
+
+    it('is a no-op when the column id is unknown', async () => {
+      await loadSampleDetail();
+      const before = JSON.stringify(store.currentBoard());
+      store.applyColumnRemoved(999);
+      const after = JSON.stringify(store.currentBoard());
+      expect(after).toBe(before);
+    });
+
+    it('is a no-op when no board is loaded', () => {
+      expect(store.currentBoard()).toBeNull();
+      store.applyColumnRemoved(99);
+      expect(store.currentBoard()).toBeNull();
+    });
+  });
+
+  describe('replaceColumnOrder()', () => {
+    it('replaces the column array and preserves card maps untouched', async () => {
+      await loadSampleDetail();
+      const newOrder = [
+        sampleColumn({ id: 15, name: 'Done (reordered)', position: 'a' }),
+        sampleColumn({ id: 12, name: 'In Progress (reordered)', position: 'b' }),
+      ];
+      store.replaceColumnOrder(newOrder);
+
+      const cols = store.currentBoard()!.columns;
+      expect(cols.map((c) => c.id)).toEqual([15, 12]);
+      expect(cols[0]?.name).toBe('Done (reordered)');
+      // Cards under 12 / 15 are still there.
+      expect(store.cardsFor(12).map((c) => c.id)).toEqual([87, 88]);
+      expect(store.cardsFor(15).map((c) => c.id)).toEqual([89]);
+    });
+
+    it('is a no-op when no board is loaded', () => {
+      expect(store.currentBoard()).toBeNull();
+      store.replaceColumnOrder([sampleColumn()]);
+      expect(store.currentBoard()).toBeNull();
+    });
   });
 });
 

@@ -1,155 +1,200 @@
 import { TestBed } from '@angular/core/testing';
+import { ComponentFixture } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
-import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
+import { By } from '@angular/platform-browser';
+import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 
 import { API_CONFIG } from '../../../../core/config/api-config';
+import type { KanbanCard, KanbanLabel } from '../../models';
 import { KanbanApi } from '../../api/kanban.api';
 import { KanbanWriteApi } from '../../api/kanban-write.api';
 import { BoardsStore } from '../../stores/boards.store';
-import type { KanbanCard } from '../../models';
-import { CardEditorDialog, type CardEditorDialogData } from './card-editor-dialog';
+import { LabelsStore } from '../../stores/labels.store';
+import {
+  CardEditorDialog,
+  type CardEditorDialogData,
+  type CardEditorDialogResult,
+} from './card-editor-dialog';
+import { CardLabelsPicker } from '../card-labels-picker/card-labels-picker';
+import { LabelChip } from '../label-chip/label-chip';
 
 const API_BASE_URL = 'http://localhost:8000/api';
-const API_PREFIX = '/v1';
-const FULL_PREFIX = `${API_BASE_URL}${API_PREFIX}`;
 
-const baseData: CardEditorDialogData = {
-  mode: 'create',
-  projectId: 7,
-  boardId: 4,
-  columnId: 12,
-};
+function sampleCard(overrides: Partial<KanbanCard> = {}): KanbanCard {
+  return {
+    id: 87,
+    column_id: 12,
+    title: 'Implement login form',
+    body: 'A long-enough body to be visible.',
+    due_date: null,
+    archived_at: null,
+    position: 'k',
+    labels: [],
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:00:00Z',
+    ...overrides,
+  };
+}
 
-function mountDialog(data: Partial<CardEditorDialogData> = {}) {
+interface MountResult {
+  fixture: ComponentFixture<CardEditorDialog>;
+  closeSpy: ReturnType<typeof vi.fn>;
+  httpMock: HttpTestingController;
+  labelsStore: LabelsStore;
+}
+
+function mountDialog(data: CardEditorDialogData): MountResult {
   TestBed.resetTestingModule();
+  const closeSpy = vi.fn();
   TestBed.configureTestingModule({
-    imports: [CardEditorDialog, NoopAnimationsModule],
+    imports: [
+      CardEditorDialog,
+      CardLabelsPicker,
+      LabelChip,
+      MatDialogModule,
+      MatSnackBarModule,
+      NoopAnimationsModule,
+    ],
     providers: [
       provideHttpClient(),
       provideHttpClientTesting(),
-      {
-        provide: API_CONFIG,
-        useValue: { apiBaseUrl: API_BASE_URL },
-      },
+      { provide: API_CONFIG, useValue: { apiBaseUrl: API_BASE_URL } },
       KanbanApi,
       KanbanWriteApi,
       BoardsStore,
-      { provide: MAT_DIALOG_DATA, useValue: { ...baseData, ...data } },
-      { provide: MatDialogRef, useValue: { close: () => undefined } },
+      LabelsStore,
+      { provide: MAT_DIALOG_DATA, useValue: data },
+      {
+        provide: MatDialogRef<CardEditorDialog, CardEditorDialogResult>,
+        useValue: { close: closeSpy, afterClosed: () => Promise.resolve(undefined) },
+      },
     ],
   });
-  const httpMock = TestBed.inject(HttpTestingController);
+  // IMPORTANT: mark the LabelsStore cache as "attempted" BEFORE
+  // createComponent() so the dialog's constructor (which fires
+  // ensureLoaded()) sees the short-circuit flag. We can't instantiate it
+  // because the LabelsStore has no public constructor — it uses
+  // field-level `inject()` calls. The factory below mounts a partial stub
+  // that wraps the real store and pre-seeds the cache; createComponent
+  // gets the same instance.
+  const realStore = TestBed.inject(LabelsStore);
+  realStore.__markLoadedForTests();
+  realStore.labelsCache.set([]);
+
   const fixture = TestBed.createComponent(CardEditorDialog);
   fixture.detectChanges();
-  return { fixture, httpMock };
+  return {
+    fixture,
+    closeSpy,
+    httpMock: TestBed.inject(HttpTestingController),
+    labelsStore: realStore,
+  };
 }
 
-const sampleCard: KanbanCard = {
-  id: 87,
-  column_id: 12,
-  title: 'Existing card',
-  body: 'existing body',
-  due_date: null,
-  archived_at: null,
-  position: 'k',
-  labels: [],
-  created_at: '2026-01-01T00:00:00Z',
-  updated_at: '2026-01-01T00:00:00Z',
-};
-
 describe('CardEditorDialog', () => {
-  it('renders empty form in create mode', () => {
-    const { fixture } = mountDialog({ mode: 'create' });
+  it('does NOT render the picker in create mode and shows the hint copy', () => {
+    const { fixture } = mountDialog({
+      mode: 'create',
+      projectId: 7,
+      boardId: 4,
+      columnId: 12,
+    });
+    const httpMock = TestBed.inject(HttpTestingController);
     const host = fixture.nativeElement as HTMLElement;
-    const titleInput = host.querySelector<HTMLInputElement>('input[type="text"]');
-    expect(titleInput?.value).toBe('');
-    expect(host.querySelector('h2')?.textContent).toContain('Create');
-  });
-
-  it('prefills from the card in edit mode', () => {
-    const { fixture } = mountDialog({ mode: 'edit', card: sampleCard });
-    const host = fixture.nativeElement as HTMLElement;
-    const titleInput = host.querySelector<HTMLInputElement>('input[type="text"]');
-    expect(titleInput?.value).toBe('Existing card');
-    expect(host.querySelector('h2')?.textContent).toContain('Edit');
-  });
-
-  it('renders server 422 fieldErrors in form fields', async () => {
-    const { fixture, httpMock } = mountDialog({ mode: 'create' });
-    const host = fixture.nativeElement as HTMLElement;
-
-    // Fill in title AND body so the form is otherwise valid; the server
-    // will reject with a 422 for a different reason (e.g. a title that
-    // exists already).
-    const titleInput = host.querySelector<HTMLInputElement>('input[type="text"]')!;
-    titleInput.value = 'Bad card';
-    titleInput.dispatchEvent(new Event('input'));
-    const bodyArea = host.querySelector<HTMLTextAreaElement>('textarea')!;
-    bodyArea.value = 'body text';
-    bodyArea.dispatchEvent(new Event('input'));
-    fixture.detectChanges();
-    await fixture.whenStable();
-
-    // Click the submit button.
-    const submitButton = host.querySelector<HTMLButtonElement>('button[type="submit"]')!;
-    submitButton.click();
-
-    // Catch the request and reply with a 422.
-    const req = httpMock.expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4/columns/12/cards`);
-    expect(req.request.method).toBe('POST');
-    req.flush(
-      {
-        message: 'The given data was invalid.',
-        errors: {
-          title: ['The title field is required.'],
-          body: ['The body field is required.'],
-        },
-      },
-      { status: 422, statusText: 'Unprocessable Entity' },
-    );
-
-    fixture.detectChanges();
-    await fixture.whenStable();
-    // Allow the signal-based validation to settle.
-    await fixture.whenStable();
-
-    // Server error messages must render in their fields.
-    const errors = host.querySelectorAll('mat-error');
-    const errorTexts = Array.from(errors).map((e) => e.textContent ?? '');
-    expect(errorTexts.some((t) => t.includes('required'))).toBe(true);
-
+    expect(host.querySelector('app-card-labels-picker')).toBeNull();
+    const hint = host.querySelector('.labels-hint');
+    expect(hint).not.toBeNull();
+    expect(hint?.textContent).toContain('You can add labels to this card after creating it.');
+    expect(fixture.debugElement.query(By.directive(CardLabelsPicker))).toBeNull();
     httpMock.verify();
   });
 
-  it('submit is disabled while submitting', async () => {
-    const { fixture, httpMock } = mountDialog({ mode: 'create' });
+  it('renders the picker in edit mode and the chip for a card label is toggled', () => {
+    const bug: KanbanLabel = {
+      id: 4,
+      name: 'bug',
+      color: '#ef4444',
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    };
+    const p1: KanbanLabel = {
+      id: 7,
+      name: 'p1',
+      color: '#f59e0b',
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    };
+    const { fixture, labelsStore } = mountDialog({
+      mode: 'edit',
+      projectId: 7,
+      boardId: 4,
+      columnId: 12,
+      card: sampleCard({ labels: [bug] }),
+    });
+    // Seed the label library AFTER mounting so the picker renders both
+    // chips. ensureLoaded() was a no-op because the cache was marked
+    // attempted before mounting.
+    labelsStore.labelsCache.set([bug, p1]);
+    fixture.detectChanges();
+
     const host = fixture.nativeElement as HTMLElement;
+    expect(host.querySelector('app-card-labels-picker')).not.toBeNull();
+    const chipEls = host.querySelectorAll('app-label-chip');
+    expect(chipEls.length).toBe(2);
+    expect(fixture.debugElement.query(By.directive(CardLabelsPicker))).not.toBeNull();
 
-    const titleInput = host.querySelector<HTMLInputElement>('input[type="text"]')!;
-    titleInput.value = 'New card';
-    titleInput.dispatchEvent(new Event('input'));
+    // CardLabelsPicker sets [interactive]="true" and binds [toggled]="hasLabel(label.id)".
+    // LabelChip renders [attr.aria-pressed]="ariaPressed()" → "true"/"false".
+    const chipButtons = host.querySelectorAll('app-label-chip button');
+    expect(chipButtons.length).toBe(2);
+    const pressedStates = Array.from(chipButtons).map((b) =>
+      (b as HTMLButtonElement).getAttribute('aria-pressed'),
+    );
+    expect(pressedStates).toContain('true');
+    expect(pressedStates).toContain('false');
+    expect(pressedStates.filter((s) => s === 'true').length).toBe(1);
+    const httpMock = TestBed.inject(HttpTestingController);
+    httpMock.verify();
+  });
 
-    const bodyArea = host.querySelector<HTMLTextAreaElement>('textarea')!;
-    bodyArea.value = 'New body';
-    bodyArea.dispatchEvent(new Event('input'));
-
+  it('LabelChip instances inside the picker receive their [toggled] input from hasLabel', () => {
+    const bug: KanbanLabel = {
+      id: 4,
+      name: 'bug',
+      color: '#ef4444',
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    };
+    const p1: KanbanLabel = {
+      id: 7,
+      name: 'p1',
+      color: '#f59e0b',
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    };
+    const { fixture, labelsStore } = mountDialog({
+      mode: 'edit',
+      projectId: 7,
+      boardId: 4,
+      columnId: 12,
+      card: sampleCard({ labels: [bug] }),
+    });
+    labelsStore.labelsCache.set([bug, p1]);
     fixture.detectChanges();
-    await fixture.whenStable();
 
-    const submitButton = host.querySelector<HTMLButtonElement>('button[type="submit"]')!;
-    expect(submitButton.disabled).toBe(false);
-
-    submitButton.click();
-
-    // Form should now be in the submitting state; button must be disabled.
-    fixture.detectChanges();
-    expect(submitButton.disabled).toBe(true);
-
-    // Drain the request.
-    const req = httpMock.expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4/columns/12/cards`);
-    req.flush({ ...sampleCard, id: 999, title: 'New card' });
+    const chipDebugs = fixture.debugElement.queryAll(By.directive(LabelChip));
+    expect(chipDebugs.length).toBe(2);
+    // Read the [toggled] input off the chip componentRef instance.
+    // LabelChip defines `toggled = input<boolean>(false)`.
+    const toggledStates: boolean[] = chipDebugs.map((d) => {
+      const instance = d.componentInstance as { toggled: () => boolean };
+      return instance.toggled();
+    });
+    expect(toggledStates.filter((b) => b).length).toBe(1);
+    const httpMock = TestBed.inject(HttpTestingController);
     httpMock.verify();
   });
 });

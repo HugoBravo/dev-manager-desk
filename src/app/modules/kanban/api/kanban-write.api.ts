@@ -4,7 +4,7 @@ import { Observable } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
 
 import { API_CONFIG } from '../../../core/config/api-config';
-import type { KanbanCard, KanbanLabel } from '../models';
+import type { KanbanCard, KanbanColumn, KanbanLabel } from '../models';
 
 import { catchHttpError, unwrapLaravelItem } from './kanban.api';
 
@@ -35,9 +35,14 @@ export interface UpdateCardPayload {
  * NEVER computes `position` locally — the server returns the canonical
  * fractional-indexing string in the response. `position` is optional: when
  * omitted the card is appended to the target column's chain.
+ *
+ * The backend validator (`MoveCardRequest`) expects the field name
+ * `to_column_id` — see `dev-manager-backend/app/Http/Requests/Kanban/MoveCardRequest.php`.
+ * Earlier revisions of the frontend shipped `target_column_id`; the
+ * mismatch caused a 422 on every move. The wire shape is now `to_column_id`.
  */
 export interface MoveCardPayload {
-  readonly target_column_id: number;
+  readonly to_column_id: number;
   readonly position?: string;
 }
 
@@ -69,6 +74,49 @@ export interface UpdateLabelPayload {
  */
 export interface SyncCardLabelsPayload {
   readonly label_ids: readonly number[];
+}
+
+/**
+ * Payload for {@link KanbanWriteApi.createColumn} (api-doc §6.7). The
+ * backend validates `name` as `required|string|min:1|max:100` and the
+ * server-computes the column's `position` (fractional indexing).
+ */
+export interface CreateColumnPayload {
+  readonly name: string;
+}
+
+/**
+ * Payload for {@link KanbanWriteApi.updateColumn} (api-doc §6.8). Both
+ * fields are optional: sending only `name` leaves `archived_at` intact;
+ * sending only `archived_at` leaves the name intact. To unarchive,
+ * send `archived_at: null`; to archive, send an ISO 8601 string. The
+ * `name` rule is `sometimes|required|string|min:1|max:100` so empty
+ * strings are rejected.
+ */
+export interface UpdateColumnPayload {
+  readonly name?: string;
+  readonly archived_at?: string | null;
+}
+
+/**
+ * Payload for {@link KanbanWriteApi.reorderColumns} (api-doc §6.6). The
+ * server REPLACES the column ordering with the supplied id list; ids not
+ * present in the list are unaffected (server-side guard). The response
+ * only returns the count that was reordered, not the column list — the
+ * caller refetches via {@link KanbanApi.listColumns} or refreshes the
+ * store via {@link BoardsStore.replaceColumnOrder}.
+ */
+export interface ReorderColumnsPayload {
+  readonly ordered_ids: readonly number[];
+}
+
+/**
+ * Result returned by {@link KanbanWriteApi.reorderColumns}. The backend
+ * returns `{ data: { reordered: number } }`; the API unwraps the outer
+ * envelope and returns this type.
+ */
+export interface ReorderColumnsResult {
+  readonly reordered: number;
 }
 
 /**
@@ -288,5 +336,128 @@ export class KanbanWriteApi {
 
   private labelsBase(): string {
     return `${this.apiConfig.apiBaseUrl}/v1`;
+  }
+
+  private columnsBase(projectId: number, boardId: number): string {
+    const prefix = `${this.apiConfig.apiBaseUrl}/v1`;
+    return `${prefix}/projects/${projectId}/kanban/boards/${boardId}/columns`;
+  }
+
+  /**
+   * `POST /api/v1/projects/{p}/kanban/boards/{b}/columns` — create a new
+   * column on a board (api-doc §6.7). Returns 201 with the new
+   * {@link KanbanColumn}. The server computes the column's `position`
+   * (fractional indexing, appended to the existing chain).
+   *
+   * Backend validation: 422 with `fieldErrors.name` if the name is empty,
+   * non-string, or longer than 100 characters.
+   */
+  createColumn(
+    projectId: number,
+    boardId: number,
+    payload: CreateColumnPayload,
+  ): Observable<KanbanColumn> {
+    return this.http
+      .post<KanbanColumn>(`${this.columnsBase(projectId, boardId)}`, payload)
+      .pipe(
+        map((raw) => unwrapLaravelItem<KanbanColumn>(raw)),
+        catchError((err: unknown) => catchHttpError(err)),
+      );
+  }
+
+  /**
+   * `PATCH /api/v1/projects/{p}/kanban/boards/{b}/columns/{c}` — update a
+   * column (api-doc §6.8). At least one of `name` / `archived_at` MUST be
+   * sent; both are optional. Sending `archived_at: null` unarchives.
+   * Returns the updated {@link KanbanColumn}.
+   *
+   * Backend validation: 422 with `fieldErrors.name` if a name is provided
+   * but fails the `required|string|min:1|max:100` rule; 409 with
+   * `code: 'column_has_contents'` if archiving a column that still has
+   * cards (the backend's archive-before-move contract — see api-doc §6.5).
+   */
+  updateColumn(
+    projectId: number,
+    boardId: number,
+    columnId: number,
+    payload: UpdateColumnPayload,
+  ): Observable<KanbanColumn> {
+    return this.http
+      .patch<KanbanColumn>(
+        `${this.columnsBase(projectId, boardId)}/${columnId}`,
+        payload,
+      )
+      .pipe(
+        map((raw) => unwrapLaravelItem<KanbanColumn>(raw)),
+        catchError((err: unknown) => catchHttpError(err)),
+      );
+  }
+
+  /**
+   * `DELETE /api/v1/projects/{p}/kanban/boards/{b}/columns/{c}` —
+   * hard-delete a column (api-doc §6.9). Returns 204. Throws 409 with
+   * `code: 'column_has_contents'` if the column still has cards; the
+   * caller surfaces this with a snackbar via
+   * {@link ErrorNormalizer.toUserMessage}.
+   */
+  deleteColumn(
+    projectId: number,
+    boardId: number,
+    columnId: number,
+  ): Observable<void> {
+    return this.http
+      .delete<void>(`${this.columnsBase(projectId, boardId)}/${columnId}`)
+      .pipe(
+        map(() => undefined),
+        catchError((err: unknown) => catchHttpError(err)),
+      );
+  }
+
+  /**
+   * `POST /api/v1/projects/{p}/kanban/boards/{b}/columns/reorder` —
+   * replace the column ordering with the supplied id list (api-doc
+   * §6.6). The endpoint expects an `ordered_ids` array; ids not in the
+   * list are untouched (server-side guard). Returns a count — use
+   * {@link KanbanApi.listColumns} / {@link BoardsStore.replaceColumnOrder}
+   * to refresh the local cache.
+   */
+  reorderColumns(
+    projectId: number,
+    boardId: number,
+    orderedIds: readonly number[],
+  ): Observable<ReorderColumnsResult> {
+    const body: ReorderColumnsPayload = { ordered_ids: [...orderedIds] };
+    return this.http
+      .post<ReorderColumnsResult>(
+        `${this.columnsBase(projectId, boardId)}/reorder`,
+        body,
+      )
+      .pipe(
+        map((raw) => unwrapLaravelItem<ReorderColumnsResult>(raw)),
+        catchError((err: unknown) => catchHttpError(err)),
+      );
+  }
+
+  /**
+   * `POST /api/v1/projects/{p}/kanban/boards/{b}/columns/{c}/move` —
+   * move a column to another board on the same project (api-doc §6.10).
+   * Returns the moved {@link KanbanColumn} with the destination board's
+   * `board_id` and a server-computed `position`.
+   */
+  moveColumn(
+    projectId: number,
+    boardId: number,
+    columnId: number,
+    toBoardId: number,
+  ): Observable<KanbanColumn> {
+    return this.http
+      .post<KanbanColumn>(
+        `${this.columnsBase(projectId, boardId)}/${columnId}/move`,
+        { to_board_id: toBoardId },
+      )
+      .pipe(
+        map((raw) => unwrapLaravelItem<KanbanColumn>(raw)),
+        catchError((err: unknown) => catchHttpError(err)),
+      );
   }
 }
