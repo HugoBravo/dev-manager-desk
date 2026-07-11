@@ -305,6 +305,21 @@ export class BoardsStore {
   }
 
   /**
+   * Drop a board from the trash cache (api-doc §16 restore on the
+   * frontend). Idempotent: a missing id is a no-op. Used by
+   * {@link BoardTrashPage} after a successful restore so the page
+   * reflects the server's state without a refetch.
+   */
+  applyTrashBoardRemoved(boardId: number): void {
+    const before = this._trash();
+    const next = before.filter((b) => b.id !== boardId);
+    if (next.length === before.length) {
+      return;
+    }
+    this._trash.set(next);
+  }
+
+  /**
    * Invalidate (clear) the boards list cache. Used by the write paths when
    * the mutation might affect a board not currently rendered.
    */

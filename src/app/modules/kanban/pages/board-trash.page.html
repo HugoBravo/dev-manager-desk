@@ -1,0 +1,65 @@
+<header class="trash-header">
+  <h1 class="trash-title">Trash</h1>
+  @if (trash().length > 0) {
+    <p class="trash-subtitle">
+      {{ trash().length }} deleted {{ trash().length === 1 ? 'board' : 'boards' }} available to
+      restore.
+    </p>
+  }
+</header>
+
+@if (loading()) {
+  <div class="state-loading" role="status" aria-live="polite">
+    <mat-progress-spinner diameter="32" mode="indeterminate"></mat-progress-spinner>
+    <p>{{ statusMessage() }}</p>
+  </div>
+} @else if (error()) {
+  <div class="state-error" role="alert">
+    <p>{{ statusMessage() }}</p>
+    <button mat-stroked-button color="primary" type="button" (click)="retry()" aria-label="Retry">
+      Retry
+    </button>
+  </div>
+} @else if (trash().length === 0) {
+  <div class="state-empty" data-testid="trash-empty" role="status" aria-live="polite">
+    <mat-icon aria-hidden="true">delete_outline</mat-icon>
+    <h2>Trash is empty</h2>
+    <p>Deleted boards stay here for 30 days before being purged automatically.</p>
+  </div>
+} @else {
+  <ul class="trash-list" aria-label="Trashed boards">
+    @for (board of trash(); track board.id) {
+      <li class="trash-row" data-testid="trash-row">
+        <div class="trash-row__meta">
+          <strong class="trash-row__name">{{ board.name }}</strong>
+          @if (board.deleted_at) {
+            <span class="trash-row__date">
+              Deleted {{ board.deleted_at | date: 'mediumDate' }}
+            </span>
+          }
+        </div>
+        <div class="trash-row__actions">
+          <button
+            mat-flat-button
+            color="primary"
+            type="button"
+            data-testid="restore-button"
+            [disabled]="isRestoring(board.id)"
+            (click)="restoreBoard(board, $any($event.currentTarget))"
+            [attr.aria-label]="'Restore board ' + board.name"
+          >
+            @if (isRestoring(board.id)) {
+              <mat-progress-spinner diameter="16" mode="indeterminate"></mat-progress-spinner>
+              <span>Restoring…</span>
+            } @else {
+              <ng-container>
+                <mat-icon>restore</mat-icon>
+                <span>Restore</span>
+              </ng-container>
+            }
+          </button>
+        </div>
+      </li>
+    }
+  </ul>
+}

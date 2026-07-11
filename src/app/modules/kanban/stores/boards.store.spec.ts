@@ -684,6 +684,48 @@ describe('BoardsStore', () => {
     });
   });
 
+  describe('applyTrashBoardRemoved()', () => {
+    it('drops the matching board from the trash signal', async () => {
+      // Seed the trash via loadTrash().
+      const load = store.loadTrash(7);
+      const req = httpMock.expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/trashed`);
+      req.flush({
+        data: [
+          {
+            id: 1,
+            project_id: 7,
+            name: 'Trash A',
+            position: 'n',
+            archived_at: null,
+            created_at: '2026-01-01T00:00:00Z',
+            updated_at: '2026-01-01T00:00:00Z',
+            deleted_at: '2026-07-04T10:00:00.000000Z',
+          },
+          {
+            id: 2,
+            project_id: 7,
+            name: 'Trash B',
+            position: 'r',
+            archived_at: null,
+            created_at: '2026-01-01T00:00:00Z',
+            updated_at: '2026-01-01T00:00:00Z',
+            deleted_at: '2026-07-04T11:00:00.000000Z',
+          },
+        ],
+      });
+      await load;
+      expect(store.trash().map((b) => b.id)).toEqual([1, 2]);
+
+      store.applyTrashBoardRemoved(1);
+      expect(store.trash().map((b) => b.id)).toEqual([2]);
+    });
+
+    it('is a no-op when no trashed board matches the id', () => {
+      store.applyTrashBoardRemoved(999);
+      expect(store.trash()).toEqual([]);
+    });
+  });
+
   describe('trash signal', () => {
     it('starts empty and not loading', () => {
       expect(store.trash()).toEqual([]);
