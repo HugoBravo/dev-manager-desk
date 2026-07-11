@@ -77,8 +77,12 @@ import { contrastColor } from '../../utils/contrast-color';
         line-height: 1.4;
         cursor: pointer;
         font-family: inherit;
-        /* background and color come from inline styles so the host
-           component can pick the contrast color at runtime. */
+        /* Background and text color come from the host's CSS custom
+           properties (--chip-background / --chip-color) which the
+           component sets per-label so contrast-color can pick black
+           or white text at runtime. */
+        background: var(--chip-background);
+        color: var(--chip-color);
       }
       .chip.read-only {
         cursor: default;
