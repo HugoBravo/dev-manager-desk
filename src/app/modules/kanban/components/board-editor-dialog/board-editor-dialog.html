@@ -1,0 +1,46 @@
+<h2 #titleRef mat-dialog-title id="board-editor-title" tabindex="-1">
+  {{ title() }}
+</h2>
+<mat-dialog-content>
+  <form
+    novalidate
+    (submit)="onSubmit($event)"
+    aria-labelledby="board-editor-title"
+    class="board-editor-form"
+  >
+    <mat-form-field appearance="outline">
+      <mat-label>Name</mat-label>
+      <input
+        #nameInput
+        matInput
+        type="text"
+        autocomplete="off"
+        [formField]="boardForm.name"
+        aria-describedby="name-errors"
+      />
+      @if (boardForm.name().errors().length > 0) {
+        <mat-error id="name-errors">
+          {{ boardForm.name().errors()[0].message }}
+        </mat-error>
+      }
+    </mat-form-field>
+  </form>
+</mat-dialog-content>
+<mat-dialog-actions align="end">
+  <button mat-button type="button" (click)="cancel()" aria-label="Cancel">Cancel</button>
+  <button
+    mat-flat-button
+    color="primary"
+    type="submit"
+    [disabled]="boardForm().invalid()"
+    (click)="onSubmit($event)"
+    [attr.aria-label]="title()"
+  >
+    @if (boardForm().submitting()) {
+      <mat-progress-spinner diameter="18"></mat-progress-spinner>
+      <span>Saving…</span>
+    } @else {
+      <span>Save</span>
+    }
+  </button>
+</mat-dialog-actions>
