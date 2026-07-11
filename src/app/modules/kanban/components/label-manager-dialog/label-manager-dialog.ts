@@ -86,7 +86,6 @@ const NAME_MAX = 64;
     <mat-dialog-content class="content" [attr.aria-describedby]="'label-manager-create-error'">
       <form class="create-row" (submit)="onCreate($event)">
         <mat-form-field appearance="outline" class="name-field" subscriptSizing="dynamic">
-          <mat-label>New label name</mat-label>
           <input
             #createNameInput
             matInput
@@ -94,46 +93,49 @@ const NAME_MAX = 64;
             [(ngModel)]="createName"
             name="createName"
             [maxlength]="NAME_MAX"
+            placeholder="New label name"
             required
             aria-label="New label name"
             (keydown.enter)="onCreate($event)"
           />
           <mat-hint align="end">{{ createName.length }} / {{ NAME_MAX }}</mat-hint>
         </mat-form-field>
-        <mat-button-toggle-group
-          class="palette"
-          aria-label="Color palette"
-          [hideSingleSelectionIndicator]="true"
-          [(ngModel)]="createColor"
-          name="createColor"
-        >
-          @for (color of palette; track color) {
-            <mat-button-toggle
-              [value]="color"
-              [attr.aria-label]="'Color ' + colorName(color)"
-              [attr.title]="colorName(color)"
-            >
-              <span class="swatch" [style.background]="color" [attr.aria-hidden]="'true'"></span>
-            </mat-button-toggle>
-          }
-        </mat-button-toggle-group>
-        <button
-          mat-flat-button
-          color="primary"
-          type="submit"
-          [disabled]="!canCreate() || store.loading() === 'create'"
-          aria-label="Create new label"
-        >
-          @if (store.loading() === 'create') {
-            <mat-progress-spinner
-              diameter="16"
-              mode="indeterminate"
-              aria-label="Creating"
-            ></mat-progress-spinner>
-          } @else {
-            <ng-container>Create</ng-container>
-          }
-        </button>
+        <div class="create-row-controls">
+          <mat-button-toggle-group
+            class="palette"
+            aria-label="Color palette"
+            [hideSingleSelectionIndicator]="true"
+            [(ngModel)]="createColor"
+            name="createColor"
+          >
+            @for (color of palette; track color) {
+              <mat-button-toggle
+                [value]="color"
+                [attr.aria-label]="'Color ' + colorName(color)"
+                [attr.title]="colorName(color)"
+              >
+                <span class="swatch" [style.background]="color" [attr.aria-hidden]="'true'"></span>
+              </mat-button-toggle>
+            }
+          </mat-button-toggle-group>
+          <button
+            mat-flat-button
+            color="primary"
+            type="submit"
+            [disabled]="!canCreate() || store.loading() === 'create'"
+            aria-label="Create new label"
+          >
+            @if (store.loading() === 'create') {
+              <mat-progress-spinner
+                diameter="16"
+                mode="indeterminate"
+                aria-label="Creating"
+              ></mat-progress-spinner>
+            } @else {
+              <ng-container>Create</ng-container>
+            }
+          </button>
+        </div>
       </form>
 
       @if (createError(); as err) {
@@ -294,11 +296,17 @@ const NAME_MAX = 64;
         min-width: 28em;
       }
       .create-row {
-        display: grid;
-        grid-template-columns: minmax(8em, 1fr) auto auto;
-        align-items: center;
-        gap: 0.5em;
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.75em;
         margin-bottom: 0.5em;
+      }
+      .create-row-controls {
+        display: flex;
+        align-items: center;
+        gap: 0.75em;
+        flex-wrap: wrap;
       }
       .name-field {
         width: 100%;
@@ -309,6 +317,8 @@ const NAME_MAX = 64;
       .palette {
         display: inline-flex;
         flex-wrap: wrap;
+        gap: 0.25em;
+        padding: 0.25em;
       }
       .inline-palette {
         margin-left: 0.5em;
