@@ -95,29 +95,10 @@
               @if (board.archived_at) {
                 <mat-card-subtitle>Archived</mat-card-subtitle>
               }
-            </mat-card-header>
-            <mat-card-content class="board-card-content">
-              <mat-checkbox
-                [checked]="selection().has(board.id)"
-                (change)="toggleSelection(board.id)"
-                (click)="$any($event).stopPropagation()"
-                [attr.aria-label]="'Select board ' + board.name"
-              >
-                Select
-              </mat-checkbox>
-            </mat-card-content>
-            <mat-card-actions>
-              <button
-                mat-stroked-button
-                type="button"
-                (click)="openBoard(board.id)"
-                [attr.aria-label]="'Open board ' + board.name"
-              >
-                Open
-              </button>
               <button
                 mat-icon-button
                 type="button"
+                class="board-card-menu"
                 data-testid="board-menu-trigger"
                 [attr.aria-label]="'Board menu ' + board.name"
                 [matMenuTriggerFor]="boardMenu"
@@ -144,6 +125,26 @@
                   <span>Move to trash</span>
                 </button>
               </mat-menu>
+            </mat-card-header>
+            <mat-card-content class="board-card-content">
+              <mat-checkbox
+                [checked]="selection().has(board.id)"
+                (change)="toggleSelection(board.id)"
+                (click)="$any($event).stopPropagation()"
+                [attr.aria-label]="'Select board ' + board.name"
+              >
+                Select
+              </mat-checkbox>
+            </mat-card-content>
+            <mat-card-actions>
+              <button
+                mat-stroked-button
+                type="button"
+                (click)="openBoard(board.id)"
+                [attr.aria-label]="'Open board ' + board.name"
+              >
+                Open
+              </button>
             </mat-card-actions>
           </mat-card>
         </li>

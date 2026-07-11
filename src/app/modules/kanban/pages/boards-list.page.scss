@@ -49,6 +49,17 @@
   width: 100%;
 }
 
+.board-card .mat-mdc-card-header {
+  position: relative;
+  padding-right: 48px;
+}
+
+.board-card-menu {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+}
+
 .state-loading {
   display: flex;
   flex-direction: column;
