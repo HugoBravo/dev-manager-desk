@@ -1,0 +1,44 @@
+@if (count() > 0) {
+  <div
+    class="bulk-actions-bar"
+    data-testid="bulk-actions-bar"
+    role="region"
+    aria-label="Bulk actions for selected boards"
+  >
+    <span class="bulk-actions-bar__count" aria-live="polite"> {{ countDisplay() }} selected </span>
+    <button
+      mat-flat-button
+      color="warn"
+      type="button"
+      data-testid="bulk-delete-button"
+      (click)="onMoveToTrash()"
+    >
+      <mat-icon>delete</mat-icon>
+      Move to trash
+    </button>
+    <button
+      mat-stroked-button
+      type="button"
+      data-testid="bulk-prefix-trigger"
+      [matMenuTriggerFor]="prefixMenu"
+      aria-haspopup="menu"
+    >
+      Prefix…
+    </button>
+    <mat-menu #prefixMenu>
+      <button mat-menu-item type="button" data-testid="bulk-prefix-add" (click)="onAddPrefix()">
+        <mat-icon>add</mat-icon>
+        Add prefix…
+      </button>
+      <button
+        mat-menu-item
+        type="button"
+        data-testid="bulk-prefix-remove"
+        (click)="onRemovePrefix()"
+      >
+        <mat-icon>remove</mat-icon>
+        Remove prefix…
+      </button>
+    </mat-menu>
+  </div>
+}
