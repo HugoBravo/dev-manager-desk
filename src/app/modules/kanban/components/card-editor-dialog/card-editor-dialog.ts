@@ -1,6 +1,6 @@
 import {
-  AfterViewInit,
   Component,
+  OnInit,
   computed,
   effect,
   inject,
@@ -114,7 +114,7 @@ const BODY_MAX = 65535; // backend limit per api-doc §7.3.
     '[attr.aria-labelledby]': "'card-editor-title'",
   },
 })
-export class CardEditorDialog implements AfterViewInit {
+export class CardEditorDialog implements OnInit {
   // `protected` so the template can bind `data.card!` (the edit-mode inline
   // label picker needs the prefilled card). Other fields stay `private`.
   protected readonly data = inject<CardEditorDialogData>(MAT_DIALOG_DATA);
@@ -201,23 +201,22 @@ export class CardEditorDialog implements AfterViewInit {
       // `serverFieldErrors` on each pass.
       void this.cardForm().value();
     });
+  }
+
+  ngOnInit(): void {
     // Ensure the user's label library is loaded so the picker chips render
     // immediately on edit-mode open. `ensureLoaded()` is idempotent — it
     // short-circuits if the cache was already populated. In create mode
     // the picker is hidden (see template), but the load is harmless and
     // keeps the data ready for the next dialog open.
-    void this.labelsStore.ensureLoaded();
-  }
-
-  ngAfterViewInit(): void {
-    // Wire the picker's chain context. The host has the project/board/column
-    // ids from `MAT_DIALOG_DATA`; the picker needs them to call the
-    // labels-sync endpoint. We bind them via the documented hand-off —
-    // `CardLabelsPicker.setChain` — rather than widening the input API.
-    if (this.data.mode !== 'edit') {
-      return;
-    }
-    queueMicrotask(() => {
+    void this.labelsStore.ensureLoaded().then(() => {
+      // Wire the picker's chain context AFTER labels are loaded so the
+      // picker's first effect reads the right card. Mirrors the
+      // `CardDetailDialog` pattern (no race between load and mount).
+      // No-op in create mode (picker is hidden).
+      if (this.data.mode !== 'edit') {
+        return;
+      }
       const picker = this.pickerRef();
       if (picker) {
         picker.setChain(this.data.projectId, this.data.boardId, this.data.columnId);
@@ -305,6 +304,31 @@ export class CardEditorDialog implements AfterViewInit {
 
   protected cancel(): void {
     this.ref.close({ action: 'cancel' });
+  }
+
+  /**
+   * Commit the server-returned card to the store after a successful
+   * labels sync. The picker emits the canonical card (with the synced
+   * label set); `BoardsStore.applyCardMutation` handles the
+   * cross-column detection (a sync never changes column, so this is
+   * effectively a within-column update).
+   *
+   * Mirrors `CardDetailDialog.onLabelsChanged` — same hook, same
+   * behavior. Without this binding the picker would silently succeed
+   * but the board would never reflect the new labels.
+   */
+  protected onLabelsChanged(card: KanbanCard): void {
+    this.store.applyCardMutation(card);
+  }
+
+  /**
+   * The picker already surfaces a snackbar with the typed error; this
+   * hook exists so the dialog can react to other side effects. It MUST
+   * stay a no-op for the snackbar to avoid double-firing the user
+   * message.
+   */
+  protected onLabelsSyncError(_err: ApiError): void {
+    // Intentionally empty — the picker already opened the snackbar.
   }
 }
 

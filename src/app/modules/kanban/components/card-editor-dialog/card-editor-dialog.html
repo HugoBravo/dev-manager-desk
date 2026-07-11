@@ -62,6 +62,8 @@
           #labelsPicker
           [card]="data.card!"
           [userLabels]="userLabels()"
+          (changed)="onLabelsChanged($event)"
+          (syncError)="onLabelsSyncError($event)"
         />
       </section>
     } @else {

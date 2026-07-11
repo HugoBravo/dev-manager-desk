@@ -197,4 +197,44 @@ describe('CardEditorDialog', () => {
     const httpMock = TestBed.inject(HttpTestingController);
     httpMock.verify();
   });
+
+  it('commits the picker-emitted card to BoardsStore via applyCardMutation', async () => {
+    const bug: KanbanLabel = {
+      id: 4,
+      name: 'bug',
+      color: '#ef4444',
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    };
+    const p1: KanbanLabel = {
+      id: 7,
+      name: 'p1',
+      color: '#f59e0b',
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    };
+    const { fixture, labelsStore, httpMock } = mountDialog({
+      mode: 'edit',
+      projectId: 7,
+      boardId: 4,
+      columnId: 12,
+      card: sampleCard({ labels: [bug] }),
+    });
+    labelsStore.labelsCache.set([bug, p1]);
+    const store = TestBed.inject(BoardsStore);
+    const applySpy = vi.spyOn(store, 'applyCardMutation');
+    fixture.detectChanges();
+
+    // Reach into the picker component and emit the canonical card the
+    // server would return after a successful labels sync.
+    const pickerDebug = fixture.debugElement.query(By.directive(CardLabelsPicker));
+    const pickerInstance = pickerDebug.componentInstance as unknown as {
+      changed: { emit: (card: KanbanCard) => void };
+    };
+    const updatedCard: KanbanCard = sampleCard({ labels: [bug, p1] });
+    pickerInstance.changed.emit(updatedCard);
+
+    expect(applySpy).toHaveBeenCalledWith(updatedCard);
+    httpMock.verify();
+  });
 });
