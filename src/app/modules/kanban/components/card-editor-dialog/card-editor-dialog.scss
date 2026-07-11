@@ -1,0 +1,38 @@
+.card-editor-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5em;
+  min-width: 28em;
+  max-width: 38em;
+}
+
+mat-form-field {
+  width: 100%;
+}
+
+.labels-section {
+  margin-top: 1em;
+  padding: 0.75em 1em;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 0.5em;
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.labels-heading {
+  margin: 0 0 0.5em;
+  font: var(--mat-sys-title-small);
+  color: var(--mat-sys-on-surface);
+}
+
+.labels-hint {
+  margin: 0.5em 0 0;
+  font: var(--mat-sys-body-small);
+  color: var(--mat-sys-on-surface-variant);
+  font-style: italic;
+}
+
+.card-editor-error {
+  margin: 0.5em 0 0;
+  color: #b00020;
+  font: var(--mat-sys-body-small);
+}

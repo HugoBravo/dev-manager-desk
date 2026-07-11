@@ -1,32 +1,32 @@
-import {
-  Component,
-  OnInit,
-  computed,
-  effect,
-  inject,
-  signal,
-  viewChild,
-} from '@angular/core';
-import {
-  FormField,
-  form,
-  maxLength,
-  required,
-  submit,
-  validate,
-} from '@angular/forms/signals';
+import { Component, OnInit, computed, effect, inject, signal, viewChild } from '@angular/core';
+import { FormField, form, maxLength, required, submit, validate } from '@angular/forms/signals';
 import { MatButtonModule } from '@angular/material/button';
-import {
-  MAT_DIALOG_DATA,
-  MatDialogModule,
-  MatDialogRef,
-} from '@angular/material/dialog';
+import { MAT_DATE_FORMATS, provideNativeDateAdapter } from '@angular/material/core';
+import { MatDatepickerModule } from '@angular/material/datepicker';
+import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { firstValueFrom } from 'rxjs';
+
+/**
+ * Force the due-date picker to render as `dd/MM/yyyy` regardless of the
+ * runtime locale. The backend expects `YYYY-MM-DD` (ISO); the picker writes
+ * ISO into the form model automatically — only the visual format changes.
+ */
+const DD_MM_YYYY_DATE_FORMATS = {
+  parse: {
+    dateInput: 'DD/MM/YYYY',
+  },
+  display: {
+    dateInput: 'DD/MM/YYYY',
+    monthYearLabel: 'MMM YYYY',
+    dateA11yLabel: 'DD/MM/YYYY',
+    monthYearA11yLabel: 'MMMM YYYY',
+  },
+};
 
 import { ErrorNormalizer } from '../../../../core/errors/error-normalizer';
 import type { ApiError } from '../../../../core/errors/api-error';
@@ -101,13 +101,19 @@ const BODY_MAX = 65535; // backend limit per api-doc §7.3.
     FormField,
     CardLabelsPicker,
     MatButtonModule,
+    MatDatepickerModule,
     MatDialogModule,
     MatFormFieldModule,
     MatIconModule,
     MatInputModule,
     MatProgressSpinnerModule,
   ],
+  providers: [
+    provideNativeDateAdapter(),
+    { provide: MAT_DATE_FORMATS, useValue: DD_MM_YYYY_DATE_FORMATS },
+  ],
   templateUrl: './card-editor-dialog.html',
+  styleUrl: './card-editor-dialog.scss',
   host: {
     role: 'dialog',
     'aria-modal': 'true',
@@ -163,29 +169,23 @@ export class CardEditorDialog implements OnInit {
       // validation pass.
       validate(schemaPath.title, () => {
         const list = this.serverFieldErrors()?.['title'];
-        return list && list.length > 0
-          ? { kind: 'server', message: list[0]! }
-          : undefined;
+        return list && list.length > 0 ? { kind: 'server', message: list[0]! } : undefined;
       });
       validate(schemaPath.body, () => {
         const list = this.serverFieldErrors()?.['body'];
-        return list && list.length > 0
-          ? { kind: 'server', message: list[0]! }
-          : undefined;
+        return list && list.length > 0 ? { kind: 'server', message: list[0]! } : undefined;
       });
       validate(schemaPath.due_date, () => {
         const list = this.serverFieldErrors()?.['due_date'];
-        return list && list.length > 0
-          ? { kind: 'server', message: list[0]! }
-          : undefined;
+        return list && list.length > 0 ? { kind: 'server', message: list[0]! } : undefined;
       });
     },
   );
 
   /** Server field errors (422 from create / update). */
-  protected readonly serverFieldErrors = signal<
-    Readonly<Record<string, readonly string[]>> | null
-  >(null);
+  protected readonly serverFieldErrors = signal<Readonly<Record<string, readonly string[]>> | null>(
+    null,
+  );
 
   protected readonly generalError = signal<string | null>(null);
 
@@ -291,11 +291,7 @@ export class CardEditorDialog implements OnInit {
         return;
       }
       this.generalError.set(ErrorNormalizer.toUserMessage(apiError));
-      this.snackBar.open(
-        ErrorNormalizer.toUserMessage(apiError),
-        'Dismiss',
-        { duration: 5000 },
-      );
+      this.snackBar.open(ErrorNormalizer.toUserMessage(apiError), 'Dismiss', { duration: 5000 });
       return;
     }
     this.generalError.set('Could not save the card. Please try again.');

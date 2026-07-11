@@ -7,12 +7,13 @@
     class="card-editor-form"
   >
     <mat-form-field appearance="outline">
-      <mat-label>Title</mat-label>
       <input
         matInput
         type="text"
         autocomplete="off"
+        placeholder="Card title"
         [formField]="cardForm.title"
+        aria-label="Card title"
         aria-describedby="title-errors"
       />
       @if (cardForm.title().errors().length > 0) {
@@ -23,12 +24,13 @@
     </mat-form-field>
 
     <mat-form-field appearance="outline">
-      <mat-label>Body</mat-label>
       <textarea
         matInput
         rows="6"
         autocomplete="off"
+        placeholder="Describe the work (optional)"
         [formField]="cardForm.body"
+        aria-label="Card description"
         aria-describedby="body-errors"
       ></textarea>
       @if (cardForm.body().errors().length > 0) {
@@ -39,15 +41,15 @@
     </mat-form-field>
 
     <mat-form-field appearance="outline">
-      <mat-label>Due date (YYYY-MM-DD)</mat-label>
       <input
         matInput
-        type="text"
-        placeholder="2026-12-31"
-        autocomplete="off"
+        [matDatepicker]="dueDatePicker"
         [formField]="cardForm.due_date"
+        aria-label="Due date"
         aria-describedby="due-errors"
       />
+      <mat-datepicker-toggle matIconSuffix [for]="dueDatePicker" />
+      <mat-datepicker #dueDatePicker />
       @if (cardForm.due_date().errors().length > 0) {
         <mat-error id="due-errors">
           {{ cardForm.due_date().errors()[0].message }}
@@ -67,9 +69,7 @@
         />
       </section>
     } @else {
-      <p class="labels-hint" role="note">
-        You can add labels to this card after creating it.
-      </p>
+      <p class="labels-hint" role="note">You can add labels to this card after creating it.</p>
     }
 
     @if (generalError(); as message) {
@@ -80,14 +80,7 @@
   </form>
 </mat-dialog-content>
 <mat-dialog-actions align="end">
-  <button
-    mat-button
-    type="button"
-    (click)="cancel()"
-    aria-label="Cancel"
-  >
-    Cancel
-  </button>
+  <button mat-button type="button" (click)="cancel()" aria-label="Cancel">Cancel</button>
   <button
     mat-flat-button
     color="primary"
