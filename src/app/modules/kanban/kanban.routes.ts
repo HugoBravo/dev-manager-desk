@@ -9,19 +9,21 @@ export const KANBAN_ROUTES: Routes = [
   },
   {
     path: 'projects',
-    loadComponent: () =>
-      import('./pages/projects-empty.page').then((m) => m.ProjectsEmptyPage),
+    loadComponent: () => import('./pages/projects-empty.page').then((m) => m.ProjectsEmptyPage),
   },
   {
     path: 'projects/:projectId/boards',
     canActivate: [projectRequiredGuard],
-    loadComponent: () =>
-      import('./pages/boards-list.page').then((m) => m.BoardsListPage),
+    loadComponent: () => import('./pages/boards-list.page').then((m) => m.BoardsListPage),
+  },
+  {
+    path: 'projects/:projectId/boards/trash',
+    canActivate: [projectRequiredGuard],
+    loadComponent: () => import('./pages/board-trash.page').then((m) => m.BoardTrashPage),
   },
   {
     path: 'projects/:projectId/boards/:boardId',
     canActivate: [projectRequiredGuard],
-    loadComponent: () =>
-      import('./pages/board-detail.page').then((m) => m.BoardDetailPage),
+    loadComponent: () => import('./pages/board-detail.page').then((m) => m.BoardDetailPage),
   },
 ];
