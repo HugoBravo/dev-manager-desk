@@ -4,7 +4,7 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 
 import { API_CONFIG } from '../../../core/config/api-config';
 import { KanbanApi } from '../api/kanban.api';
-import type { BoardDetail, KanbanCard, KanbanColumn } from '../models';
+import type { Board, BoardDetail, KanbanCard, KanbanColumn } from '../models';
 import { BoardsStore } from './boards.store';
 
 const API_BASE_URL = 'http://localhost:8000/api';
@@ -264,7 +264,9 @@ describe('BoardsStore', () => {
           '15': [...current.cardsByColumnId['15']!, sampleCard(87, 15, 'u')],
         },
       };
-      (store as unknown as { _currentBoard: { set: (v: typeof drifted) => void } })._currentBoard.set(drifted);
+      (
+        store as unknown as { _currentBoard: { set: (v: typeof drifted) => void } }
+      )._currentBoard.set(drifted);
 
       // Now the server says card 87 is in column 15 (canonical).
       store.applyCardMutation({ ...sampleCard(87, 15), position: 'u' });
@@ -291,7 +293,9 @@ describe('BoardsStore', () => {
           '12': current.cardsByColumnId['12']!.filter((c) => c.id !== 87),
         },
       };
-      (store as unknown as { _currentBoard: { set: (v: typeof stripped) => void } })._currentBoard.set(stripped);
+      (
+        store as unknown as { _currentBoard: { set: (v: typeof stripped) => void } }
+      )._currentBoard.set(stripped);
 
       store.applyCardMutation({ ...sampleCard(87, 15), position: 'r' });
 
@@ -411,51 +415,45 @@ describe('BoardsStore', () => {
   async function loadSampleDetail(): Promise<void> {
     const promise = store.loadBoard(7, 4);
     httpMock.expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4`).flush(sampleDetail.board);
-    httpMock
-      .expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4/columns`)
-      .flush({
-        data: sampleDetail.columns,
-        links: { first: '', last: '', prev: null, next: null },
-        meta: {
-          current_page: 1,
-          from: 1,
-          last_page: 1,
-          per_page: 25,
-          to: 2,
-          total: 2,
-          path: '',
-        },
-      });
-    httpMock
-      .expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4/columns/12/cards`)
-      .flush({
-        data: sampleDetail.cardsByColumnId['12'],
-        links: { first: '', last: '', prev: null, next: null },
-        meta: {
-          current_page: 1,
-          from: 1,
-          last_page: 1,
-          per_page: 25,
-          to: 2,
-          total: 2,
-          path: '',
-        },
-      });
-    httpMock
-      .expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4/columns/15/cards`)
-      .flush({
-        data: sampleDetail.cardsByColumnId['15'],
-        links: { first: '', last: '', prev: null, next: null },
-        meta: {
-          current_page: 1,
-          from: 1,
-          last_page: 1,
-          per_page: 25,
-          to: 1,
-          total: 1,
-          path: '',
-        },
-      });
+    httpMock.expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4/columns`).flush({
+      data: sampleDetail.columns,
+      links: { first: '', last: '', prev: null, next: null },
+      meta: {
+        current_page: 1,
+        from: 1,
+        last_page: 1,
+        per_page: 25,
+        to: 2,
+        total: 2,
+        path: '',
+      },
+    });
+    httpMock.expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4/columns/12/cards`).flush({
+      data: sampleDetail.cardsByColumnId['12'],
+      links: { first: '', last: '', prev: null, next: null },
+      meta: {
+        current_page: 1,
+        from: 1,
+        last_page: 1,
+        per_page: 25,
+        to: 2,
+        total: 2,
+        path: '',
+      },
+    });
+    httpMock.expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4/columns/15/cards`).flush({
+      data: sampleDetail.cardsByColumnId['15'],
+      links: { first: '', last: '', prev: null, next: null },
+      meta: {
+        current_page: 1,
+        from: 1,
+        last_page: 1,
+        per_page: 25,
+        to: 1,
+        total: 1,
+        path: '',
+      },
+    });
     await promise;
   }
 
@@ -563,6 +561,197 @@ describe('BoardsStore', () => {
       expect(store.currentBoard()).toBeNull();
       store.replaceColumnOrder([sampleColumn()]);
       expect(store.currentBoard()).toBeNull();
+    });
+  });
+
+  // --- Board lifecycle helpers (Task 2.3, api-doc §16/§17) ---
+
+  /** Render a fresh `Board` with the given overrides. */
+  const sampleBoardFn = (overrides: Partial<Board> = {}): Board => ({
+    id: 99,
+    project_id: 7,
+    name: 'New board',
+    position: 'v',
+    archived_at: null,
+    deleted_at: null,
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:00:00Z',
+    ...overrides,
+  });
+
+  describe('applyBoardCreated()', () => {
+    it('pushes the new board and sorts by position ASC', () => {
+      // Seed with one board at position 'n'.
+      store.boardsCache.set([sampleBoardFn({ id: 1, name: 'Alpha', position: 'n' })]);
+      store.applyBoardCreated(sampleBoardFn({ id: 2, name: 'Bravo', position: 'r' }));
+      store.applyBoardCreated(sampleBoardFn({ id: 3, name: 'Charlie', position: 'k' }));
+
+      const ids = store.boards().map((b) => b.id);
+      expect(ids).toEqual([3, 1, 2]);
+    });
+
+    it('is a no-op when boards cache is empty (the new board becomes the first element)', () => {
+      expect(store.boards()).toEqual([]);
+      store.applyBoardCreated(sampleBoardFn({ id: 1, position: 'n' }));
+      expect(store.boards().map((b) => b.id)).toEqual([1]);
+    });
+  });
+
+  describe('applyBoardRemoved()', () => {
+    it('filters out the matching id from the boards cache', () => {
+      store.boardsCache.set([
+        sampleBoardFn({ id: 1, position: 'n' }),
+        sampleBoardFn({ id: 2, position: 'r' }),
+        sampleBoardFn({ id: 3, position: 'v' }),
+      ]);
+      store.applyBoardRemoved(2);
+      expect(store.boards().map((b) => b.id)).toEqual([1, 3]);
+    });
+
+    it('is idempotent — second call leaves the cache unchanged', () => {
+      store.boardsCache.set([
+        sampleBoardFn({ id: 1, position: 'n' }),
+        sampleBoardFn({ id: 2, position: 'r' }),
+      ]);
+      store.applyBoardRemoved(99);
+      const before = JSON.stringify(store.boards());
+      store.applyBoardRemoved(99);
+      const after = JSON.stringify(store.boards());
+      expect(after).toBe(before);
+      expect(store.boards().map((b) => b.id)).toEqual([1, 2]);
+    });
+
+    it('is a no-op when the boards cache is empty', () => {
+      expect(store.boards()).toEqual([]);
+      store.applyBoardRemoved(42);
+      expect(store.boards()).toEqual([]);
+    });
+  });
+
+  describe('applyBoardRestored()', () => {
+    it('pushes the restored board and sorts by position ASC', () => {
+      store.boardsCache.set([
+        sampleBoardFn({ id: 1, name: 'Alpha', position: 'n' }),
+        sampleBoardFn({ id: 2, name: 'Bravo', position: 'r' }),
+      ]);
+      store.applyBoardRestored(sampleBoardFn({ id: 3, name: 'Charlie', position: 'k' }));
+      expect(store.boards().map((b) => b.id)).toEqual([3, 1, 2]);
+    });
+  });
+
+  describe('applyBoardCloned()', () => {
+    it('pushes the new board and sorts by position; source is untouched', () => {
+      const source = sampleBoardFn({ id: 1, name: 'Sprint Template', position: 'n' });
+      store.boardsCache.set([source]);
+      const cloned = sampleBoardFn({
+        id: 2,
+        name: 'Sprint Template (Copy)',
+        position: 'p',
+      });
+      store.applyBoardCloned(cloned);
+
+      const ids = store.boards().map((b) => b.id);
+      expect(ids).toEqual([1, 2]);
+      // Source untouched: same name, position, updated_at.
+      const sourceAfter = store.boards().find((b) => b.id === 1);
+      expect(sourceAfter).toEqual(source);
+    });
+
+    it('is a no-op when the source is not in the cache (only the clone is added)', () => {
+      expect(store.boards()).toEqual([]);
+      const cloned = sampleBoardFn({ id: 2, name: 'Clone', position: 'n' });
+      store.applyBoardCloned(cloned);
+      expect(store.boards().map((b) => b.id)).toEqual([2]);
+    });
+  });
+
+  describe('applyBoardUpdated()', () => {
+    it('replaces the matching board by id (existing helper)', () => {
+      store.boardsCache.set([
+        sampleBoardFn({ id: 1, name: 'Alpha', position: 'n' }),
+        sampleBoardFn({ id: 2, name: 'Bravo', position: 'r' }),
+      ]);
+      store.applyBoardUpdated(sampleBoardFn({ id: 2, name: 'Bravo (renamed)', position: 'r' }));
+      expect(store.boards().find((b) => b.id === 2)?.name).toBe('Bravo (renamed)');
+      expect(store.boards().map((b) => b.id)).toEqual([1, 2]);
+    });
+
+    it('is a no-op when no board matches the id', () => {
+      store.boardsCache.set([sampleBoardFn({ id: 1, name: 'Alpha', position: 'n' })]);
+      const before = JSON.stringify(store.boards());
+      store.applyBoardUpdated(sampleBoardFn({ id: 999, name: 'Ghost' }));
+      expect(JSON.stringify(store.boards())).toBe(before);
+    });
+  });
+
+  describe('trash signal', () => {
+    it('starts empty and not loading', () => {
+      expect(store.trash()).toEqual([]);
+      expect(store.trashLoading()).toBe(false);
+    });
+
+    it('loadTrash() populates the trash signal and clears the loading flag', async () => {
+      const promise = store.loadTrash(7);
+      // Loading flips on while in flight.
+      expect(store.trashLoading()).toBe(true);
+
+      const req = httpMock.expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/trashed`);
+      req.flush({
+        data: [
+          {
+            data: sampleBoardFn({ id: 11, name: 'Old board', deleted_at: '2026-07-10T00:00:00Z' }),
+          },
+        ],
+        links: { first: '', last: '', prev: null, next: null },
+        meta: {
+          current_page: 1,
+          from: 1,
+          last_page: 1,
+          per_page: 25,
+          to: 1,
+          total: 1,
+          path: '',
+        },
+      });
+      await promise;
+
+      expect(store.trashLoading()).toBe(false);
+      expect(store.trash()).toHaveLength(1);
+      expect(store.trash()[0]?.id).toBe(11);
+      expect(store.trash()[0]?.deleted_at).toBe('2026-07-10T00:00:00Z');
+    });
+
+    it('loadTrash() sets store.error and returns null on failure', async () => {
+      const promise = store.loadTrash(7);
+      httpMock
+        .expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/trashed`)
+        .flush({ message: 'gone' }, { status: 404, statusText: 'Not Found' });
+
+      const result = await promise;
+      expect(result).toBeNull();
+      expect(store.error()).not.toBeNull();
+      expect(store.trash()).toEqual([]);
+      expect(store.trashLoading()).toBe(false);
+    });
+
+    it('loadTrash() appends ?page=N when page > 1', async () => {
+      const promise = store.loadTrash(7, 2);
+      const req = httpMock.expectOne((r) => r.params.get('page') === '2');
+      req.flush({
+        data: [],
+        links: { first: '', last: '', prev: null, next: null },
+        meta: {
+          current_page: 2,
+          from: null,
+          last_page: 1,
+          per_page: 25,
+          to: null,
+          total: 0,
+          path: '',
+        },
+      });
+      await promise;
+      expect(store.trash()).toEqual([]);
     });
   });
 });

@@ -44,8 +44,10 @@ export class BoardsStore {
   private readonly writeApi = inject(KanbanWriteApi);
 
   private readonly _boards = signal<readonly Board[]>([]);
+  private readonly _trash = signal<readonly Board[]>([]);
   private readonly _currentBoard = signal<BoardDetail | null>(null);
   private readonly _loading = signal<BoardsStoreLoading>('idle');
+  private readonly _trashLoading = signal<boolean>(false);
   private readonly _error = signal<ApiError | null>(null);
 
   readonly boards = this._boards.asReadonly();
@@ -62,6 +64,19 @@ export class BoardsStore {
   readonly currentBoard = this._currentBoard.asReadonly();
   readonly loading = this._loading.asReadonly();
   readonly error = this._error.asReadonly();
+
+  /**
+   * Trash list signal (api-doc §16 trash). Populated by {@link loadTrash}
+   * and consumed by the {@link BoardTrashPage}. Distinct from the active
+   * `boards` signal because the two views have orthogonal lifecycles and
+   * pagination semantics — separating them avoids accidental cross-filtering.
+   */
+  readonly trash = this._trash.asReadonly();
+  /**
+   * `true` while a trash fetch is in flight. Drives the trash page's
+   * loading skeleton without coupling to the global `loading` tri-state.
+   */
+  readonly trashLoading = this._trashLoading.asReadonly();
 
   /**
    * Loading convenience: returns `true` while a *specific* fetch is in
@@ -88,6 +103,27 @@ export class BoardsStore {
       return null;
     } finally {
       this._loading.set('idle');
+    }
+  }
+
+  /**
+   * Fetch the soft-deleted boards for a project (api-doc §16 trash). Sets
+   * `trashLoading` while in flight and writes the result into the `trash`
+   * signal. On failure, sets `store.error()` and returns `null` — the trash
+   * page renders the error state without a re-throw.
+   */
+  async loadTrash(projectId: number, page = 1): Promise<readonly Board[] | null> {
+    this._trashLoading.set(true);
+    this._error.set(null);
+    try {
+      const list = await firstValueFrom(this.api.listTrashedBoards(projectId, page));
+      this._trash.set(list);
+      return list;
+    } catch (err) {
+      this._error.set(toApiError(err));
+      return null;
+    } finally {
+      this._trashLoading.set(false);
     }
   }
 
@@ -212,6 +248,60 @@ export class BoardsStore {
   applyBoardUpdated(board: Board): void {
     const next = this._boards().map((b) => (b.id === board.id ? board : b));
     this._boards.set(next);
+  }
+
+  /**
+   * Push a freshly-created board into the active boards cache and re-sort
+   * by `position` ASC. The server returns the canonical `position` (api-doc
+   * §16 create); sorting client-side keeps the list stable when boards
+   * are inserted out-of-order by concurrent operations.
+   *
+   * Idempotent: if a board with the same id already exists, the entry is
+   * replaced in place (treat as update). This guards against a race where
+   * the optimistic commit lands before the server's authoritative response.
+   */
+  applyBoardCreated(board: Board): void {
+    const existing = this._boards();
+    const without = existing.filter((b) => b.id !== board.id);
+    const next = sortBoardsByPosition([...without, board]);
+    this._boards.set(next);
+  }
+
+  /**
+   * Drop a board from the active boards cache. Idempotent — a missing id
+   * is a no-op, so callers can fire-and-forget on a destroy path without
+   * worrying about double-application (e.g. an undo snackbar followed by
+   * the original delete's later cache commit).
+   */
+  applyBoardRemoved(boardId: number): void {
+    const before = this._boards();
+    const next = before.filter((b) => b.id !== boardId);
+    if (next.length === before.length) {
+      return;
+    }
+    this._boards.set(next);
+  }
+
+  /**
+   * Insert a freshly-restored board into the active cache. The restored
+   * board's `deleted_at` is `null` and the server returns a fresh
+   * `position`; we re-sort by position ASC to keep the cache stable.
+   */
+  applyBoardRestored(board: Board): void {
+    const existing = this._boards();
+    const without = existing.filter((b) => b.id !== board.id);
+    const next = sortBoardsByPosition([...without, board]);
+    this._boards.set(next);
+  }
+
+  /**
+   * Insert a freshly-cloned board into the active cache. The source board
+   * is unchanged — clone does NOT remove the source from the project. If
+   * the source isn't in the cache (e.g. the user navigated straight from
+   * the detail page), only the clone is appended.
+   */
+  applyBoardCloned(board: Board): void {
+    this.applyBoardCreated(board);
   }
 
   /**
@@ -440,4 +530,14 @@ function toApiError(err: unknown): ApiError {
         ? (err as { message: string }).message
         : 'Could not reach the server.',
   };
+}
+
+/**
+ * Sort boards by their server-computed `position` string (lexorank). The
+ * backend uses fraccional indexing with a 36-char alphabet; we delegate to
+ * the native `String.localeCompare` because the alphabet is a contiguous
+ * ASCII range where lexicographic order matches server order.
+ */
+function sortBoardsByPosition(boards: readonly Board[]): readonly Board[] {
+  return [...boards].sort((a, b) => a.position.localeCompare(b.position));
 }
