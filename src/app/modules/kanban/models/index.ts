@@ -10,12 +10,10 @@
 import type { Board } from './board.model';
 import type { KanbanColumn } from './column.model';
 import type { KanbanCard } from './card.model';
-import type { KanbanComment } from './comment.model';
-import type { KanbanAttachment } from './attachment.model';
 import type { KanbanLabel } from './label.model';
 import { LABEL_PALETTE } from './label.model';
 
-export type { Board } from './board.model';
+export type { Board, BoardAuditLog, BulkOperationItem, BulkOperationResult } from './board.model';
 export type { KanbanColumn } from './column.model';
 export type { KanbanCard } from './card.model';
 export type { KanbanComment } from './comment.model';

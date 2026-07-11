@@ -1,12 +1,19 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
 
 import { API_CONFIG } from '../../../core/config/api-config';
-import type { KanbanCard, KanbanColumn, KanbanLabel } from '../models';
+import type {
+  Board,
+  BoardAuditLog,
+  BulkOperationResult,
+  KanbanCard,
+  KanbanColumn,
+  KanbanLabel,
+} from '../models';
 
-import { catchHttpError, unwrapLaravelItem } from './kanban.api';
+import { catchHttpError, unwrapLaravelItem, unwrapLaravelItems } from './kanban.api';
 
 /**
  * Payload for {@link KanbanWriteApi.createCard} (api-doc §7.3).
@@ -117,6 +124,61 @@ export interface ReorderColumnsPayload {
  */
 export interface ReorderColumnsResult {
   readonly reordered: number;
+}
+
+/**
+ * Payload for {@link KanbanWriteApi.createBoard} (api-doc §16 create). The
+ * backend validates `name` as `required|string|min:1|max:100` and
+ * case-insensitively unique per project on active rows. The server
+ * computes the `position` (fractional indexing).
+ */
+export interface CreateBoardPayload {
+  readonly name: string;
+}
+
+/**
+ * Payload for {@link KanbanWriteApi.updateBoard} (api-doc §16 update).
+ * Currently only `name` is mutable client-side; the field is optional.
+ * Triggers a `renamed` audit entry on success.
+ */
+export interface UpdateBoardPayload {
+  readonly name?: string;
+}
+
+/**
+ * Payload for {@link KanbanWriteApi.cloneBoard} (api-doc §17). `name` is
+ * optional — when omitted the backend defaults to `"{original} (Copy)"`
+ * with collision-aware suffixing (`(Copy 2)`, `(Copy 3)`, ...).
+ */
+export interface CloneBoardPayload {
+  readonly name?: string;
+}
+
+/**
+ * Payload for {@link KanbanWriteApi.bulkDeleteBoards} (api-doc §18).
+ * Capped at 100 ids per request (`422 max_100`). Counts as one request
+ * against the `throttle:api` budget.
+ */
+export interface BulkDeleteBoardsPayload {
+  readonly ids: readonly number[];
+}
+
+/**
+ * Mode for {@link KanbanWriteApi.bulkRenameBoards}. `add` prepends the
+ * `prefix` to each board's name; `remove` strips it. The remove branch is
+ * a no-op (200 with no mutation) if the board's name doesn't start with
+ * `prefix` (api-doc Q3 resolution).
+ */
+export type BulkRenameMode = 'add' | 'remove';
+
+/**
+ * Payload for {@link KanbanWriteApi.bulkRenameBoards} (api-doc §18).
+ * `prefix` is required (`max:50`), `mode` is `add` or `remove`.
+ */
+export interface BulkRenameBoardsPayload {
+  readonly ids: readonly number[];
+  readonly prefix: string;
+  readonly mode: BulkRenameMode;
 }
 
 /**
@@ -357,12 +419,10 @@ export class KanbanWriteApi {
     boardId: number,
     payload: CreateColumnPayload,
   ): Observable<KanbanColumn> {
-    return this.http
-      .post<KanbanColumn>(`${this.columnsBase(projectId, boardId)}`, payload)
-      .pipe(
-        map((raw) => unwrapLaravelItem<KanbanColumn>(raw)),
-        catchError((err: unknown) => catchHttpError(err)),
-      );
+    return this.http.post<KanbanColumn>(`${this.columnsBase(projectId, boardId)}`, payload).pipe(
+      map((raw) => unwrapLaravelItem<KanbanColumn>(raw)),
+      catchError((err: unknown) => catchHttpError(err)),
+    );
   }
 
   /**
@@ -383,10 +443,7 @@ export class KanbanWriteApi {
     payload: UpdateColumnPayload,
   ): Observable<KanbanColumn> {
     return this.http
-      .patch<KanbanColumn>(
-        `${this.columnsBase(projectId, boardId)}/${columnId}`,
-        payload,
-      )
+      .patch<KanbanColumn>(`${this.columnsBase(projectId, boardId)}/${columnId}`, payload)
       .pipe(
         map((raw) => unwrapLaravelItem<KanbanColumn>(raw)),
         catchError((err: unknown) => catchHttpError(err)),
@@ -400,17 +457,11 @@ export class KanbanWriteApi {
    * caller surfaces this with a snackbar via
    * {@link ErrorNormalizer.toUserMessage}.
    */
-  deleteColumn(
-    projectId: number,
-    boardId: number,
-    columnId: number,
-  ): Observable<void> {
-    return this.http
-      .delete<void>(`${this.columnsBase(projectId, boardId)}/${columnId}`)
-      .pipe(
-        map(() => undefined),
-        catchError((err: unknown) => catchHttpError(err)),
-      );
+  deleteColumn(projectId: number, boardId: number, columnId: number): Observable<void> {
+    return this.http.delete<void>(`${this.columnsBase(projectId, boardId)}/${columnId}`).pipe(
+      map(() => undefined),
+      catchError((err: unknown) => catchHttpError(err)),
+    );
   }
 
   /**
@@ -428,10 +479,7 @@ export class KanbanWriteApi {
   ): Observable<ReorderColumnsResult> {
     const body: ReorderColumnsPayload = { ordered_ids: [...orderedIds] };
     return this.http
-      .post<ReorderColumnsResult>(
-        `${this.columnsBase(projectId, boardId)}/reorder`,
-        body,
-      )
+      .post<ReorderColumnsResult>(`${this.columnsBase(projectId, boardId)}/reorder`, body)
       .pipe(
         map((raw) => unwrapLaravelItem<ReorderColumnsResult>(raw)),
         catchError((err: unknown) => catchHttpError(err)),
@@ -451,13 +499,172 @@ export class KanbanWriteApi {
     toBoardId: number,
   ): Observable<KanbanColumn> {
     return this.http
-      .post<KanbanColumn>(
-        `${this.columnsBase(projectId, boardId)}/${columnId}/move`,
-        { to_board_id: toBoardId },
-      )
+      .post<KanbanColumn>(`${this.columnsBase(projectId, boardId)}/${columnId}/move`, {
+        to_board_id: toBoardId,
+      })
       .pipe(
         map((raw) => unwrapLaravelItem<KanbanColumn>(raw)),
         catchError((err: unknown) => catchHttpError(err)),
       );
+  }
+
+  // --- Board lifecycle methods (api-doc §16-§19) ---
+
+  /**
+   * `POST /api/v1/projects/{p}/kanban/boards` — create a board in a
+   * project (api-doc §16 create). The server returns the new {@link Board}
+   * with a server-computed `position` (fractional indexing). On success
+   * the caller should commit to {@link BoardsStore.applyBoardCreated}.
+   *
+   * Errors:
+   * - `422 name_taken` (duplicate name, case-insensitive, on active rows)
+   * - `401 unauth`
+   */
+  createBoard(projectId: number, payload: CreateBoardPayload): Observable<Board> {
+    return this.http.post<Board>(`${this.boardsBase(projectId)}`, payload).pipe(
+      map((raw) => unwrapLaravelItem<Board>(raw)),
+      catchError((err: unknown) => catchHttpError(err)),
+    );
+  }
+
+  /**
+   * `PATCH /api/v1/projects/{p}/kanban/boards/{b}` — rename a board
+   * (api-doc §16 update). Only `name` is mutable. Triggers a `renamed`
+   * audit entry server-side; the caller should commit to
+   * {@link BoardsStore.applyBoardUpdated}.
+   *
+   * Errors:
+   * - `422 name_taken` on rename collision (case-insensitive)
+   * - `404` cross-owner (collapses to `notFound` via {@link ErrorNormalizer})
+   */
+  updateBoard(projectId: number, boardId: number, payload: UpdateBoardPayload): Observable<Board> {
+    return this.http.patch<Board>(`${this.boardsBase(projectId)}/${boardId}`, payload).pipe(
+      map((raw) => unwrapLaravelItem<Board>(raw)),
+      catchError((err: unknown) => catchHttpError(err)),
+    );
+  }
+
+  /**
+   * `DELETE /api/v1/projects/{p}/kanban/boards/{b}` — soft-delete a board
+   * (api-doc §16 destroy). Returns 204 on success. Refuses with
+   * `409 board_has_contents` if the board has non-empty columns — the UI
+   * surfaces this through {@link BoardConflictDialog}.
+   *
+   * The caller should commit to {@link BoardsStore.applyBoardRemoved}.
+   */
+  deleteBoard(projectId: number, boardId: number): Observable<void> {
+    return this.http.delete<void>(`${this.boardsBase(projectId)}/${boardId}`).pipe(
+      map(() => undefined),
+      catchError((err: unknown) => catchHttpError(err)),
+    );
+  }
+
+  /**
+   * `POST /api/v1/projects/{p}/kanban/boards/{b}/restore` — restore a
+   * soft-deleted board (api-doc §16 restore). Returns the active
+   * {@link Board} resource with `deleted_at: null`.
+   *
+   * Errors:
+   * - `422 not_trashed` when the board is already active
+   * - `404` when the board is past the 30-day purge window
+   *
+   * The caller should commit to {@link BoardsStore.applyBoardRestored}.
+   */
+  restoreBoard(projectId: number, boardId: number): Observable<Board> {
+    return this.http.post<Board>(`${this.boardsBase(projectId)}/${boardId}/restore`, {}).pipe(
+      map((raw) => unwrapLaravelItem<Board>(raw)),
+      catchError((err: unknown) => catchHttpError(err)),
+    );
+  }
+
+  /**
+   * `POST /api/v1/projects/{p}/kanban/boards/{b}/clone` — duplicate a
+   * board with its columns (no cards) (api-doc §17). When `payload.name`
+   * is omitted the backend defaults to `"{original} (Copy)"` with
+   * collision-aware suffixing. Returns 201 with the new {@link Board}.
+   *
+   * The source board is untouched; the caller should commit the new
+   * board to {@link BoardsStore.applyBoardCloned}.
+   */
+  cloneBoard(
+    projectId: number,
+    boardId: number,
+    payload: CloneBoardPayload = {},
+  ): Observable<Board> {
+    return this.http.post<Board>(`${this.boardsBase(projectId)}/${boardId}/clone`, payload).pipe(
+      map((raw) => unwrapLaravelItem<Board>(raw)),
+      catchError((err: unknown) => catchHttpError(err)),
+    );
+  }
+
+  /**
+   * `GET /api/v1/projects/{p}/kanban/boards/{b}/audit?page=N` — paginated
+   * audit log for a board (api-doc §19), newest-first, page size 25.
+   * Returns a flat {@link BoardAuditLog} array (unwraps the Laravel
+   * per-row envelope).
+   *
+   * Errors:
+   * - `404` cross-owner
+   * - `401 unauth`
+   */
+  fetchBoardAudit(
+    projectId: number,
+    boardId: number,
+    page = 1,
+  ): Observable<readonly BoardAuditLog[]> {
+    const url = `${this.boardsBase(projectId)}/${boardId}/audit`;
+    return this.http
+      .get<unknown>(url, {
+        params: page > 1 ? new HttpParams().set('page', String(page)) : new HttpParams(),
+      })
+      .pipe(
+        map((raw) => unwrapLaravelItems<BoardAuditLog>(raw)),
+        catchError((err: unknown) => catchHttpError(err)),
+      );
+  }
+
+  /**
+   * `POST /api/v1/boards/bulk-delete` — soft-delete many boards in a
+   * single request (api-doc §18). Capped at 100 ids (`422 max_100`).
+   * Counts as one request against `throttle:api`. Per-board ownership is
+   * resolved server-side; cross-owner ids report `404` in the result map.
+   *
+   * Returns a {@link BulkOperationResult} with per-board status — the UI
+   * surfaces 409s for `board_has_contents` and 404s for cross-owner ids
+   * individually, so partial failure doesn't block the success path.
+   */
+  bulkDeleteBoards(ids: readonly number[]): Observable<BulkOperationResult> {
+    const body: BulkDeleteBoardsPayload = { ids: [...ids] };
+    return this.http.post<BulkOperationResult>(`${this.boardsGlobalBase()}/bulk-delete`, body).pipe(
+      map((raw) => unwrapLaravelItem<BulkOperationResult>(raw)),
+      catchError((err: unknown) => catchHttpError(err)),
+    );
+  }
+
+  /**
+   * `POST /api/v1/boards/bulk-rename` — rename many boards by prefix in
+   * a single request (api-doc §18). `mode: 'add'` prepends `prefix`;
+   * `mode: 'remove'` strips it (no-op if the board's name doesn't start
+   * with `prefix`). Capped at 100 ids.
+   */
+  bulkRenameBoards(
+    ids: readonly number[],
+    prefix: string,
+    mode: BulkRenameMode,
+  ): Observable<BulkOperationResult> {
+    const body: BulkRenameBoardsPayload = { ids: [...ids], prefix, mode };
+    return this.http.post<BulkOperationResult>(`${this.boardsGlobalBase()}/bulk-rename`, body).pipe(
+      map((raw) => unwrapLaravelItem<BulkOperationResult>(raw)),
+      catchError((err: unknown) => catchHttpError(err)),
+    );
+  }
+
+  private boardsBase(projectId: number): string {
+    const prefix = `${this.apiConfig.apiBaseUrl}/v1`;
+    return `${prefix}/projects/${projectId}/kanban/boards`;
+  }
+
+  private boardsGlobalBase(): string {
+    return `${this.apiConfig.apiBaseUrl}/v1/boards`;
   }
 }

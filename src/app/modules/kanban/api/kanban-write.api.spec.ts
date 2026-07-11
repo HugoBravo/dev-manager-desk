@@ -316,17 +316,17 @@ describe('KanbanWriteApi', () => {
     });
 
     it('updateColumn routes 409 column_has_contents through the normalizer', async () => {
-      const promise = api.updateColumn(7, 4, 21, { archived_at: '2026-07-07T00:00:00Z' }).toPromise();
-      httpMock
-        .expectOne(`${columnsBase(7, 4)}/21`)
-        .flush(
-          {
-            message: 'Cannot archive a column that still has cards.',
-            code: 'column_has_contents',
-            column_id: 21,
-          },
-          { status: 409, statusText: 'Conflict' },
-        );
+      const promise = api
+        .updateColumn(7, 4, 21, { archived_at: '2026-07-07T00:00:00Z' })
+        .toPromise();
+      httpMock.expectOne(`${columnsBase(7, 4)}/21`).flush(
+        {
+          message: 'Cannot archive a column that still has cards.',
+          code: 'column_has_contents',
+          column_id: 21,
+        },
+        { status: 409, statusText: 'Conflict' },
+      );
       const captured = (await promise.catch((e: ApiError) => e)) as ApiError;
       expect(captured.kind).toBe('conflict');
       if (captured.kind === 'conflict') {
@@ -344,16 +344,14 @@ describe('KanbanWriteApi', () => {
 
     it('deleteColumn routes 409 column_has_contents through the normalizer', async () => {
       const promise = api.deleteColumn(7, 4, 21).toPromise();
-      httpMock
-        .expectOne(`${columnsBase(7, 4)}/21`)
-        .flush(
-          {
-            message: 'This column still has cards.',
-            code: 'column_has_contents',
-            column_id: 21,
-          },
-          { status: 409, statusText: 'Conflict' },
-        );
+      httpMock.expectOne(`${columnsBase(7, 4)}/21`).flush(
+        {
+          message: 'This column still has cards.',
+          code: 'column_has_contents',
+          column_id: 21,
+        },
+        { status: 409, statusText: 'Conflict' },
+      );
       const captured = (await promise.catch((e: ApiError) => e)) as ApiError;
       expect(captured.kind).toBe('conflict');
       if (captured.kind === 'conflict') {
@@ -390,6 +388,320 @@ describe('KanbanWriteApi', () => {
       const moved = { ...sampleColumn(21), board_id: 9 };
       req.flush(moved);
       await expect(promise).resolves.toEqual(moved);
+    });
+  });
+
+  describe('board CRUD', () => {
+    const sampleBoard = (id = 4) => ({
+      id,
+      project_id: 7,
+      name: `Board ${id}`,
+      position: 'n',
+      archived_at: null,
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    });
+
+    const boardsBase = (projectId: number) => `${FULL_PREFIX}/projects/${projectId}/kanban/boards`;
+
+    describe('createBoard()', () => {
+      it('POSTs /projects/{p}/kanban/boards with { name } and returns the new board', async () => {
+        const promise = api.createBoard(7, { name: 'Sprint 42' }).toPromise();
+        const req = httpMock.expectOne(boardsBase(7));
+        expect(req.request.method).toBe('POST');
+        expect(req.request.body).toEqual({ name: 'Sprint 42' });
+        req.flush(sampleBoard(42));
+        await expect(promise).resolves.toEqual(sampleBoard(42));
+      });
+
+      it('routes 422 name_taken through the normalizer with fieldErrors', async () => {
+        const promise = api.createBoard(7, { name: 'taken' }).toPromise();
+        httpMock.expectOne(boardsBase(7)).flush(
+          {
+            message: 'A board with this name already exists in this project.',
+            errors: { name: ['A board with this name already exists in this project.'] },
+          },
+          { status: 422, statusText: 'Unprocessable Entity' },
+        );
+        await expect(promise).rejects.toMatchObject({
+          kind: 'validation',
+          fieldErrors: {
+            name: ['A board with this name already exists in this project.'],
+          },
+        });
+      });
+
+      it('routes 401 unauth through the normalizer', async () => {
+        const promise = api.createBoard(7, { name: 'Sprint 42' }).toPromise();
+        httpMock
+          .expectOne(boardsBase(7))
+          .flush({ message: 'Unauthenticated.' }, { status: 401, statusText: 'Unauthorized' });
+        await expect(promise).rejects.toMatchObject({ kind: 'unauthorized' });
+      });
+    });
+
+    describe('updateBoard()', () => {
+      it('PATCHes /boards/{id} with the partial payload', async () => {
+        const promise = api.updateBoard(7, 4, { name: 'Renamed' }).toPromise();
+        const req = httpMock.expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4`);
+        expect(req.request.method).toBe('PATCH');
+        expect(req.request.body).toEqual({ name: 'Renamed' });
+        req.flush({ ...sampleBoard(4), name: 'Renamed' });
+        await expect(promise).resolves.toMatchObject({ name: 'Renamed' });
+      });
+
+      it('routes 404 cross-owner through the normalizer (existence-leak guard)', async () => {
+        const promise = api.updateBoard(7, 4, { name: 'Renamed' }).toPromise();
+        httpMock
+          .expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4`)
+          .flush({ message: 'gone' }, { status: 404, statusText: 'Not Found' });
+        await expect(promise).rejects.toMatchObject({ kind: 'notFound' });
+      });
+
+      it('routes 422 name_taken on rename through the normalizer', async () => {
+        const promise = api.updateBoard(7, 4, { name: 'taken' }).toPromise();
+        httpMock.expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4`).flush(
+          {
+            message: 'A board with this name already exists.',
+            errors: { name: ['A board with this name already exists.'] },
+          },
+          { status: 422, statusText: 'Unprocessable Entity' },
+        );
+        await expect(promise).rejects.toMatchObject({
+          kind: 'validation',
+          fieldErrors: { name: ['A board with this name already exists.'] },
+        });
+      });
+    });
+
+    describe('deleteBoard()', () => {
+      it('DELETEs /boards/{id} and returns void on 204', async () => {
+        const promise = api.deleteBoard(7, 4).toPromise();
+        const req = httpMock.expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4`);
+        expect(req.request.method).toBe('DELETE');
+        req.flush(null, { status: 204, statusText: 'No Content' });
+        await expect(promise).resolves.toBeUndefined();
+      });
+
+      it('routes 409 board_has_contents through the normalizer with code', async () => {
+        const promise = api.deleteBoard(7, 4).toPromise();
+        httpMock.expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4`).flush(
+          {
+            message: 'This board still has columns.',
+            code: 'board_has_contents',
+            board_id: 4,
+          },
+          { status: 409, statusText: 'Conflict' },
+        );
+        const captured = (await promise.catch((e: ApiError) => e)) as ApiError;
+        expect(captured.kind).toBe('conflict');
+        if (captured.kind === 'conflict') {
+          expect(captured.code).toBe('board_has_contents');
+        }
+      });
+
+      it('routes 404 cross-owner through the normalizer', async () => {
+        const promise = api.deleteBoard(7, 4).toPromise();
+        httpMock
+          .expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4`)
+          .flush({ message: 'gone' }, { status: 404, statusText: 'Not Found' });
+        await expect(promise).rejects.toMatchObject({ kind: 'notFound' });
+      });
+    });
+
+    describe('restoreBoard()', () => {
+      it('POSTs /boards/{id}/restore and returns the restored board', async () => {
+        const promise = api.restoreBoard(7, 4).toPromise();
+        const req = httpMock.expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4/restore`);
+        expect(req.request.method).toBe('POST');
+        req.flush({ ...sampleBoard(4), name: 'Restored' });
+        await expect(promise).resolves.toMatchObject({ name: 'Restored' });
+      });
+
+      it('routes 422 not_trashed through the normalizer as validation', async () => {
+        const promise = api.restoreBoard(7, 4).toPromise();
+        httpMock.expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4/restore`).flush(
+          {
+            message: 'Board is not in trash.',
+            errors: {},
+          },
+          { status: 422, statusText: 'Unprocessable Entity' },
+        );
+        await expect(promise).rejects.toMatchObject({ kind: 'validation' });
+      });
+    });
+
+    describe('cloneBoard()', () => {
+      it('POSTs /boards/{id}/clone with no body and returns the new board', async () => {
+        const promise = api.cloneBoard(7, 4).toPromise();
+        const req = httpMock.expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4/clone`);
+        expect(req.request.method).toBe('POST');
+        expect(req.request.body).toEqual({});
+        req.flush({ ...sampleBoard(99), name: 'Board 4 (Copy)' });
+        await expect(promise).resolves.toMatchObject({ id: 99, name: 'Board 4 (Copy)' });
+      });
+
+      it('POSTs /boards/{id}/clone with { name } when provided', async () => {
+        const promise = api.cloneBoard(7, 4, { name: 'Q3 Sprint' }).toPromise();
+        const req = httpMock.expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4/clone`);
+        expect(req.request.body).toEqual({ name: 'Q3 Sprint' });
+        req.flush({ ...sampleBoard(99), name: 'Q3 Sprint' });
+        await expect(promise).resolves.toMatchObject({ name: 'Q3 Sprint' });
+      });
+
+      it('routes 404 cross-owner / trashed source through the normalizer', async () => {
+        const promise = api.cloneBoard(7, 4).toPromise();
+        httpMock
+          .expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4/clone`)
+          .flush({ message: 'gone' }, { status: 404, statusText: 'Not Found' });
+        await expect(promise).rejects.toMatchObject({ kind: 'notFound' });
+      });
+    });
+
+    describe('fetchBoardAudit()', () => {
+      it('GETs /boards/{id}/audit and unwraps the paginated envelope', async () => {
+        const promise = api.fetchBoardAudit(7, 4).toPromise();
+        const req = httpMock.expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4/audit`);
+        expect(req.request.method).toBe('GET');
+        expect(req.request.params.has('page')).toBe(false);
+        req.flush({
+          data: [
+            {
+              data: {
+                id: 1,
+                board_id: 4,
+                actor_user_id: 7,
+                action: 'created',
+                payload: {},
+                created_at: '2026-01-01T00:00:00Z',
+              },
+            },
+          ],
+          links: { first: '', last: '', prev: null, next: null },
+          meta: {
+            current_page: 1,
+            from: 1,
+            last_page: 1,
+            per_page: 25,
+            to: 1,
+            total: 1,
+            path: '',
+          },
+        });
+        const result = await promise;
+        expect(result).toHaveLength(1);
+        expect(result?.[0]).toMatchObject({
+          id: 1,
+          board_id: 4,
+          actor_user_id: 7,
+          action: 'created',
+        });
+      });
+
+      it('appends ?page=N when page > 1', async () => {
+        const promise = api.fetchBoardAudit(7, 4, 2).toPromise();
+        const req = httpMock.expectOne((r) => r.params.get('page') === '2');
+        req.flush({
+          data: [],
+          links: { first: '', last: '', prev: null, next: null },
+          meta: {
+            current_page: 2,
+            from: null,
+            last_page: 1,
+            per_page: 25,
+            to: null,
+            total: 0,
+            path: '',
+          },
+        });
+        await expect(promise).resolves.toEqual([]);
+      });
+
+      it('routes 404 cross-owner through the normalizer', async () => {
+        const promise = api.fetchBoardAudit(7, 4).toPromise();
+        httpMock
+          .expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4/audit`)
+          .flush({ message: 'gone' }, { status: 404, statusText: 'Not Found' });
+        await expect(promise).rejects.toMatchObject({ kind: 'notFound' });
+      });
+    });
+
+    describe('bulkDeleteBoards()', () => {
+      it('POSTs /boards/bulk-delete with { ids } and unwraps the result envelope', async () => {
+        const promise = api.bulkDeleteBoards([1, 2, 3]).toPromise();
+        const req = httpMock.expectOne(`${FULL_PREFIX}/boards/bulk-delete`);
+        expect(req.request.method).toBe('POST');
+        expect(req.request.body).toEqual({ ids: [1, 2, 3] });
+        req.flush({
+          data: {
+            results: [
+              { id: 1, status: 204 },
+              { id: 2, status: 204 },
+              { id: 3, status: 409, error: { code: 'board_has_contents' } },
+            ],
+            summary: { total: 3, ok: 2, failed: 1 },
+          },
+        });
+        const result = await promise;
+        expect(result).toEqual({
+          results: [
+            { id: 1, status: 204 },
+            { id: 2, status: 204 },
+            { id: 3, status: 409, error: { code: 'board_has_contents' } },
+          ],
+          summary: { total: 3, ok: 2, failed: 1 },
+        });
+      });
+
+      it('routes 422 max_100 through the normalizer with fieldErrors', async () => {
+        const ids = Array.from({ length: 101 }, (_, i) => i + 1);
+        const promise = api.bulkDeleteBoards(ids).toPromise();
+        httpMock.expectOne(`${FULL_PREFIX}/boards/bulk-delete`).flush(
+          {
+            message: 'Too many ids.',
+            errors: { ids: ['The ids may not have more than 100 items.'] },
+          },
+          { status: 422, statusText: 'Unprocessable Entity' },
+        );
+        await expect(promise).rejects.toMatchObject({
+          kind: 'validation',
+          fieldErrors: { ids: ['The ids may not have more than 100 items.'] },
+        });
+      });
+    });
+
+    describe('bulkRenameBoards()', () => {
+      it('POSTs /boards/bulk-rename with { ids, prefix, mode } and unwraps the result', async () => {
+        const promise = api.bulkRenameBoards([1, 2], 'v2-', 'add').toPromise();
+        const req = httpMock.expectOne(`${FULL_PREFIX}/boards/bulk-rename`);
+        expect(req.request.method).toBe('POST');
+        expect(req.request.body).toEqual({ ids: [1, 2], prefix: 'v2-', mode: 'add' });
+        req.flush({
+          data: {
+            results: [
+              { id: 1, status: 200 },
+              { id: 2, status: 200 },
+            ],
+            summary: { total: 2, ok: 2, failed: 0 },
+          },
+        });
+        const result = await promise;
+        expect(result).toEqual({
+          results: [
+            { id: 1, status: 200 },
+            { id: 2, status: 200 },
+          ],
+          summary: { total: 2, ok: 2, failed: 0 },
+        });
+      });
+
+      it('routes 401 unauth through the normalizer', async () => {
+        const promise = api.bulkRenameBoards([1], 'x', 'add').toPromise();
+        httpMock
+          .expectOne(`${FULL_PREFIX}/boards/bulk-rename`)
+          .flush({ message: 'Unauthenticated.' }, { status: 401, statusText: 'Unauthorized' });
+        await expect(promise).rejects.toMatchObject({ kind: 'unauthorized' });
+      });
     });
   });
 });
