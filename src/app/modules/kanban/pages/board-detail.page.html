@@ -55,6 +55,16 @@
         <mat-icon aria-hidden="true">label</mat-icon>
         Manage labels
       </button>
+      <button
+        mat-stroked-button
+        type="button"
+        class="add-column-button"
+        (click)="openAddColumn($any($event.currentTarget))"
+        aria-label="Add column"
+      >
+        <mat-icon aria-hidden="true">add</mat-icon>
+        Add column
+      </button>
     </div>
 
     @if (data.columns.length === 0) {
@@ -64,20 +74,8 @@
           <mat-card-title>This board has no columns</mat-card-title>
         </mat-card-header>
         <mat-card-content>
-          <p>Create columns to start organizing cards.</p>
+          <p>Use “Add column” above to create your first column.</p>
         </mat-card-content>
-        <mat-card-actions>
-          <button
-            mat-stroked-button
-            type="button"
-            class="add-column-button"
-            (click)="openAddColumn($any($event.currentTarget))"
-            aria-label="Add column"
-          >
-            <mat-icon aria-hidden="true">add</mat-icon>
-            Add column
-          </button>
-        </mat-card-actions>
       </mat-card>
     } @else {
       <div class="columns-grid" cdkDropListGroup aria-label="Board columns">
@@ -200,16 +198,6 @@
             </button>
           </section>
         }
-        <button
-          mat-stroked-button
-          type="button"
-          class="add-column-card"
-          (click)="openAddColumn($any($event.currentTarget))"
-          aria-label="Add column"
-        >
-          <mat-icon aria-hidden="true">add</mat-icon>
-          Add column
-        </button>
       </div>
     }
   }
