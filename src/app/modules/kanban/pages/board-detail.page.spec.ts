@@ -427,24 +427,16 @@ describe('BoardDetailPage', () => {
     fixture.detectChanges();
 
     const host = fixture.nativeElement as HTMLElement;
-    const trigger = host.querySelector<HTMLButtonElement>(
-      '[data-testid="board-menu-trigger"]',
-    );
+    const trigger = host.querySelector<HTMLButtonElement>('[data-testid="board-menu-trigger"]');
     expect(trigger).not.toBeNull();
 
     trigger!.click();
     await fixture.whenStable();
     fixture.detectChanges();
 
-    expect(
-      document.body.querySelector('[data-testid="board-menu-rename"]'),
-    ).not.toBeNull();
-    expect(
-      document.body.querySelector('[data-testid="board-menu-delete"]'),
-    ).not.toBeNull();
-    expect(
-      document.body.querySelector('[data-testid="board-menu-audit"]'),
-    ).not.toBeNull();
+    expect(document.body.querySelector('[data-testid="board-menu-rename"]')).not.toBeNull();
+    expect(document.body.querySelector('[data-testid="board-menu-delete"]')).not.toBeNull();
+    expect(document.body.querySelector('[data-testid="board-menu-audit"]')).not.toBeNull();
   });
 
   it('clicking View audit log expands the audit panel and calls listBoardAudit', async () => {
@@ -470,9 +462,7 @@ describe('BoardDetailPage', () => {
     await fixture.whenStable();
     fixture.detectChanges();
 
-    const auditReq = httpMock.expectOne(
-      `${FULL_PREFIX}/projects/7/kanban/boards/4/audit`,
-    );
+    const auditReq = httpMock.expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4/audit`);
     expect(auditReq.request.method).toBe('GET');
     auditReq.flush(
       paginated([
@@ -551,9 +541,11 @@ describe('BoardDetailPage', () => {
     const writeApi = TestBed.inject(KanbanWriteApi);
     const deleteSpy = vi.spyOn(writeApi, 'deleteBoard').mockReturnValue(of(undefined));
 
-    const router = (fixture.componentInstance as unknown as {
-      router: { navigate: (cmds: unknown[]) => Promise<boolean> };
-    }).router;
+    const router = (
+      fixture.componentInstance as unknown as {
+        router: { navigate: (cmds: unknown[]) => Promise<boolean> };
+      }
+    ).router;
     const navSpy = vi.spyOn(router, 'navigate');
 
     const trigger = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(
