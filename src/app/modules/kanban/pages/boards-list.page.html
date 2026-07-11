@@ -41,18 +41,51 @@
           }
         </mat-card-subtitle>
       </mat-card-header>
-      <mat-card-content>
-        <p>Creating boards is part of a future update.</p>
-      </mat-card-content>
+      <mat-card-actions>
+        <button
+          mat-flat-button
+          color="primary"
+          type="button"
+          data-testid="empty-state-create-board"
+          aria-label="Create your first board"
+          (click)="openCreateBoardDialog($any($event.currentTarget))"
+        >
+          <mat-icon aria-hidden="true">add</mat-icon>
+          Create your first board
+        </button>
+      </mat-card-actions>
     </mat-card>
   } @else {
-    <h1 class="boards-title">
-      @if (current(); as project) {
-        Boards for {{ project.name }}
-      } @else {
-        Boards
-      }
-    </h1>
+    <header class="boards-header">
+      <h1 class="boards-title">
+        @if (current(); as project) {
+          Boards for {{ project.name }}
+        } @else {
+          Boards
+        }
+      </h1>
+      <button
+        mat-flat-button
+        color="primary"
+        type="button"
+        data-testid="create-board-button"
+        aria-label="Create board"
+        (click)="openCreateBoardDialog($any($event.currentTarget))"
+      >
+        <mat-icon aria-hidden="true">add</mat-icon>
+        Create board
+      </button>
+    </header>
+
+    @if (selection().size > 0) {
+      <app-bulk-actions-bar
+        [count]="selection().size"
+        (bulkDelete)="runBulkDelete()"
+        (bulkAddPrefix)="runBulkRename('add')"
+        (bulkRemovePrefix)="runBulkRename('remove')"
+      />
+    }
+
     <ul class="boards-list" aria-label="Boards">
       @for (board of boards(); track board.id) {
         <li class="boards-list-item">
@@ -63,6 +96,16 @@
                 <mat-card-subtitle>Archived</mat-card-subtitle>
               }
             </mat-card-header>
+            <mat-card-content class="board-card-content">
+              <mat-checkbox
+                [checked]="selection().has(board.id)"
+                (change)="toggleSelection(board.id)"
+                (click)="$any($event).stopPropagation()"
+                [attr.aria-label]="'Select board ' + board.name"
+              >
+                Select
+              </mat-checkbox>
+            </mat-card-content>
             <mat-card-actions>
               <button
                 mat-stroked-button
@@ -72,6 +115,35 @@
               >
                 Open
               </button>
+              <button
+                mat-icon-button
+                type="button"
+                data-testid="board-menu-trigger"
+                [attr.aria-label]="'Board menu ' + board.name"
+                [matMenuTriggerFor]="boardMenu"
+              >
+                <mat-icon aria-hidden="true">more_vert</mat-icon>
+              </button>
+              <mat-menu #boardMenu="matMenu">
+                <button
+                  mat-menu-item
+                  type="button"
+                  data-testid="board-menu-rename"
+                  (click)="openRenameBoardDialog(board, $any($event.currentTarget))"
+                >
+                  <mat-icon aria-hidden="true">edit</mat-icon>
+                  <span>Rename</span>
+                </button>
+                <button
+                  mat-menu-item
+                  type="button"
+                  data-testid="board-menu-delete"
+                  (click)="openDeleteBoardConfirm(board)"
+                >
+                  <mat-icon aria-hidden="true">delete</mat-icon>
+                  <span>Move to trash</span>
+                </button>
+              </mat-menu>
             </mat-card-actions>
           </mat-card>
         </li>
