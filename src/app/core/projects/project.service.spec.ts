@@ -18,6 +18,7 @@ const sampleProject = (overrides: Partial<Project> = {}): Project => ({
   id: 7,
   name: 'Demo',
   slug: 'demo',
+  description: null,
   owner_id: 1,
   archived_at: null,
   created_at: '2026-01-01T00:00:00Z',

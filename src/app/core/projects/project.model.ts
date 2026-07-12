@@ -6,6 +6,7 @@ export interface Project {
   readonly id: number;
   readonly name: string;
   readonly slug: string;
+  readonly description: string | null;
   readonly owner_id: number;
   readonly archived_at: string | null;
   readonly created_at: string;
