@@ -1,0 +1,87 @@
+<section class="projects-wrapper" aria-live="polite" aria-busy="true">
+  @if (!isBootstrapped()) {
+    <div class="state-loading" role="status" aria-live="polite">
+      <mat-progress-spinner
+        mode="indeterminate"
+        diameter="48"
+        aria-label="Loading projects"
+      ></mat-progress-spinner>
+      <p class="state-text">Loading projects</p>
+    </div>
+  } @else if (bootstrapError(); as apiError) {
+    <mat-card appearance="outlined" class="state-error" role="alert">
+      <mat-card-header>
+        <mat-icon mat-card-avatar aria-hidden="true">error_outline</mat-icon>
+        <mat-card-title>Couldn't load projects</mat-card-title>
+      </mat-card-header>
+      <mat-card-content>
+        <p>{{ statusMessage() }}</p>
+      </mat-card-content>
+      <mat-card-actions>
+        <button
+          mat-stroked-button
+          type="button"
+          (click)="retry()"
+          aria-label="Retry loading projects"
+        >
+          Retry
+        </button>
+      </mat-card-actions>
+    </mat-card>
+  } @else if (projects().length === 0) {
+    <mat-card appearance="outlined" class="state-empty">
+      <mat-card-header>
+        <mat-icon mat-card-avatar aria-hidden="true">folder_open</mat-icon>
+        <mat-card-title>No projects yet</mat-card-title>
+        <mat-card-subtitle>
+          Projects will appear here once created.
+        </mat-card-subtitle>
+      </mat-card-header>
+      <mat-card-actions>
+        <button
+          mat-flat-button
+          color="primary"
+          type="button"
+          data-testid="empty-state-create-project"
+          aria-label="Create your first project"
+          [disabled]="isSubmitting()"
+          (click)="openCreateProjectDialog($any($event.currentTarget))"
+        >
+          <mat-icon aria-hidden="true">add</mat-icon>
+          Create your first project
+        </button>
+      </mat-card-actions>
+    </mat-card>
+  } @else {
+    <header class="projects-header">
+      <h1 class="projects-title">Projects</h1>
+      <button
+        mat-flat-button
+        color="primary"
+        type="button"
+        data-testid="create-project-button"
+        aria-label="Create project"
+        [disabled]="isSubmitting()"
+        (click)="openCreateProjectDialog($any($event.currentTarget))"
+      >
+        <mat-icon aria-hidden="true">add</mat-icon>
+        Create project
+      </button>
+    </header>
+
+    <ul class="projects-list" aria-label="Projects">
+      @for (project of projects(); track project.id) {
+        <li class="projects-list-item">
+          <mat-card appearance="outlined" class="project-card">
+            <mat-card-header>
+              <mat-card-title>{{ project.name }}</mat-card-title>
+              @if (project.description) {
+                <mat-card-subtitle>{{ project.description }}</mat-card-subtitle>
+              }
+            </mat-card-header>
+          </mat-card>
+        </li>
+      }
+    </ul>
+  }
+</section>
