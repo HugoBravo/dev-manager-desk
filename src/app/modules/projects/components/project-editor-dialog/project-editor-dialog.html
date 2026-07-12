@@ -1,0 +1,69 @@
+<h2 #titleRef mat-dialog-title id="project-editor-title" tabindex="-1">
+  {{ title }}
+</h2>
+<mat-dialog-content>
+  <form
+    novalidate
+    (submit)="onSubmit($event)"
+    aria-labelledby="project-editor-title"
+    class="project-editor-form"
+  >
+    <mat-form-field appearance="outline">
+      <mat-label>Name</mat-label>
+      <input
+        #nameInput
+        matInput
+        type="text"
+        autocomplete="off"
+        [formField]="projectForm.name"
+        aria-describedby="name-errors"
+      />
+      @if (projectForm.name().errors().length > 0) {
+        <mat-error id="name-errors">
+          {{ projectForm.name().errors()[0].message }}
+        </mat-error>
+      }
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Description (optional)</mat-label>
+      <textarea
+        matInput
+        [formField]="projectForm.description"
+        rows="3"
+        aria-describedby="description-errors"
+      ></textarea>
+      @if (projectForm.description().errors().length > 0) {
+        <mat-error id="description-errors">
+          {{ projectForm.description().errors()[0].message }}
+        </mat-error>
+      }
+    </mat-form-field>
+  </form>
+</mat-dialog-content>
+<mat-dialog-actions align="end">
+  <button
+    mat-button
+    type="button"
+    (click)="cancel()"
+    aria-label="Cancel"
+    data-testid="dialog-cancel"
+  >
+    Cancel
+  </button>
+  <button
+    mat-flat-button
+    color="primary"
+    type="submit"
+    data-testid="dialog-save"
+    [disabled]="projectForm().submitting() || projectForm().invalid()"
+    [attr.aria-label]="title"
+  >
+    @if (projectForm().submitting()) {
+      <mat-progress-spinner diameter="18"></mat-progress-spinner>
+      <span>Saving…</span>
+    } @else {
+      <span>Save</span>
+    }
+  </button>
+</mat-dialog-actions>
