@@ -114,4 +114,98 @@ describe('ProjectsApi', () => {
     req.flush({ data: [] });
     await projectsPromise;
   });
+
+  it('create() POSTs to /v1/projects, unwraps the envelope, and returns the Project', async () => {
+    const projectPromise = firstValueFrom(
+      api.create({ name: 'My Project', description: 'Notes here' }),
+    );
+
+    const req = httpMock.expectOne(
+      (r) => r.url === `${apiBaseUrl}/v1/projects` && r.method === 'POST',
+    );
+    expect(req.request.body).toEqual({
+      name: 'My Project',
+      description: 'Notes here',
+    });
+    req.flush({
+      data: {
+        id: 42,
+        name: 'My Project',
+        description: 'Notes here',
+        slug: 'my-project',
+        archived_at: null,
+        owner_id: 1,
+        created_at: '2026-01-01T00:00:00Z',
+        updated_at: '2026-01-01T00:00:00Z',
+      },
+    });
+
+    const created = await projectPromise;
+    expect(created).toEqual({
+      id: 42,
+      name: 'My Project',
+      description: 'Notes here',
+      slug: 'my-project',
+      archived_at: null,
+      owner_id: 1,
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    });
+  });
+
+  it('create() serializes description as null when omitted', async () => {
+    const projectPromise = firstValueFrom(api.create({ name: 'No Description' }));
+
+    const req = httpMock.expectOne(
+      (r) => r.url === `${apiBaseUrl}/v1/projects` && r.method === 'POST',
+    );
+    expect(req.request.body).toEqual({
+      name: 'No Description',
+      description: null,
+    });
+    req.flush({
+      data: {
+        id: 7,
+        name: 'No Description',
+        description: null,
+        slug: 'no-description',
+        archived_at: null,
+        owner_id: 1,
+        created_at: '2026-01-01T00:00:00Z',
+        updated_at: '2026-01-01T00:00:00Z',
+      },
+    });
+    await projectPromise;
+  });
+
+  it('create() propagates 422 validation errors as HttpErrorResponse', async () => {
+    const projectPromise = firstValueFrom(api.create({ name: '' }));
+
+    const req = httpMock.expectOne(
+      (r) => r.url === `${apiBaseUrl}/v1/projects` && r.method === 'POST',
+    );
+    req.flush(
+      {
+        message: 'The name field is required.',
+        errors: { name: ['The name field is required.'] },
+      },
+      { status: 422, statusText: 'Unprocessable Entity' },
+    );
+
+    await expect(projectPromise).rejects.toMatchObject({
+      status: 422,
+      statusText: 'Unprocessable Entity',
+    });
+  });
+
+  it('create() propagates network errors (status 0)', async () => {
+    const projectPromise = firstValueFrom(api.create({ name: 'Whatever' }));
+
+    const req = httpMock.expectOne(
+      (r) => r.url === `${apiBaseUrl}/v1/projects` && r.method === 'POST',
+    );
+    req.error(new ProgressEvent('error'), { status: 0, statusText: 'Unknown Error' });
+
+    await expect(projectPromise).rejects.toMatchObject({ status: 0 });
+  });
 });

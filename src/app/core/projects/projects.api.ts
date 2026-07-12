@@ -38,4 +38,20 @@ export class ProjectsApi {
       })
       .pipe(map((env) => env.data.map((wrapped) => wrapped.data)));
   }
+
+  /**
+   * Create a new project. POSTs to `/v1/projects` and unwraps Laravel's
+   * per-resource `{ data: Project }` envelope so callers see a flat
+   * `Project`. `description` is sent as `null` when omitted so the
+   * nullable backend column receives a JSON null (not the string `"null"`
+   * or `undefined`).
+   */
+  create(input: { name: string; description?: string | null }): Observable<Project> {
+    return this.http
+      .post<{ data: Project }>(`${this.apiConfig.apiBaseUrl}/v1/projects`, {
+        name: input.name,
+        description: input.description ?? null,
+      })
+      .pipe(map((env) => env.data));
+  }
 }
