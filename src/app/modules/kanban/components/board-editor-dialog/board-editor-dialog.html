@@ -9,12 +9,12 @@
     class="board-editor-form"
   >
     <mat-form-field appearance="outline">
-      <mat-label>Name</mat-label>
       <input
         #nameInput
         matInput
         type="text"
         autocomplete="off"
+        placeholder="Name"
         [formField]="boardForm.name"
         aria-describedby="name-errors"
       />
