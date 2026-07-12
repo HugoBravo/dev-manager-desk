@@ -56,6 +56,20 @@ export class ProjectService {
   }
 
   /**
+   * Create a new project via the API, prepend it to the visible list, and
+   * set it as the active project. Callers (typically the create-project
+   * dialog) should `await` the promise to learn when the API call has
+   * resolved; on rejection the list and active selection are unchanged so
+   * the user can retry from the same context.
+   */
+  async create(input: { name: string; description?: string | null }): Promise<Project> {
+    const project = await firstValueFrom(this.api.create(input));
+    this._projects.update((list) => [project, ...list]);
+    this.setActive(project);
+    return project;
+  }
+
+  /**
    * Hydrate the project list from the server and revalidate the stored id.
    * Must be called inside an injection context (constructor or
    * `runInInjectionContext`) so `inject()` resolves.

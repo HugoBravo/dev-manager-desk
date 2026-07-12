@@ -237,4 +237,53 @@ describe('ProjectService', () => {
     expect(window.localStorage.getItem(STORAGE_KEY)).toBe('11');
     expect(window.localStorage.getItem(LEGACY_STORAGE_KEY)).toBeNull();
   });
+
+  // -------- C3: create() happy + error paths --------
+
+  it('create() prepends the new project to the list and sets it active', async () => {
+    const { service, httpMock } = configure();
+    // Seed with an existing project so we can verify prepend.
+    const bootstrapPromise = service.bootstrap();
+    httpMock.expectOne(projectsUrl).flush(paginated([sampleProject({ id: 1, name: 'Existing' })]));
+    await bootstrapPromise;
+
+    const created = sampleProject({ id: 2, name: 'Fresh', description: 'Notes' });
+    const createPromise = service.create({ name: 'Fresh', description: 'Notes' });
+
+    const req = httpMock.expectOne(`${API_BASE_URL}${API_PREFIX}/projects`);
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({ name: 'Fresh', description: 'Notes' });
+    req.flush({ data: created });
+
+    const result = await createPromise;
+    expect(result).toEqual(created);
+    // New project is at the head of the list.
+    expect(service.projects().map((p) => p.id)).toEqual([2, 1]);
+    // `current` follows the new project + localStorage updated.
+    expect(service.currentId()).toBe(2);
+    expect(service.current()?.name).toBe('Fresh');
+    expect(window.localStorage.getItem(STORAGE_KEY)).toBe('2');
+    httpMock.verify();
+  });
+
+  it('create() leaves _projects and current unchanged when the API errors', async () => {
+    const { service, httpMock } = configure();
+    // Seed with an existing project; bootstrap returns one row.
+    const bootstrapPromise = service.bootstrap();
+    httpMock.expectOne(projectsUrl).flush(paginated([sampleProject({ id: 1, name: 'Existing' })]));
+    await bootstrapPromise;
+    expect(service.projects().map((p) => p.id)).toEqual([1]);
+
+    const createPromise = service.create({ name: 'Will Fail' });
+    const req = httpMock.expectOne(`${API_BASE_URL}${API_PREFIX}/projects`);
+    req.flush({ message: 'down' }, { status: 503, statusText: 'Service Unavailable' });
+
+    await expect(createPromise).rejects.toMatchObject({ status: 503 });
+    // No mutation of the list.
+    expect(service.projects().map((p) => p.id)).toEqual([1]);
+    // No mutation of the active id.
+    expect(service.currentId()).toBeNull();
+    expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
+    httpMock.verify();
+  });
 });
