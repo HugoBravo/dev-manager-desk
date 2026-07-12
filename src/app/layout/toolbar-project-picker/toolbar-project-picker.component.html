@@ -6,7 +6,6 @@
     ></mat-progress-bar>
   } @else {
     <mat-form-field appearance="outline" class="picker-field" subscriptSizing="dynamic">
-      <mat-label>Project</mat-label>
       <mat-select
         [value]="current()?.id ?? null"
         (selectionChange)="onSelectionChange($event.value)"
