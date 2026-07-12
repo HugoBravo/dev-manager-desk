@@ -12,6 +12,11 @@ export const MODULES_ROUTES: Routes = [
       ),
     children: [
       {
+        path: 'projects',
+        loadChildren: () =>
+          import('./projects/projects.routes').then((m) => m.PROJECTS_ROUTES),
+      },
+      {
         path: 'kanban',
         loadChildren: () =>
           import('./kanban/kanban.routes').then((m) => m.KANBAN_ROUTES),

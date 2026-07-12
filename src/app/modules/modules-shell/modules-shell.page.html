@@ -9,8 +9,19 @@
     <mat-nav-list aria-label="Menu principal">
       <a
         mat-list-item
+        routerLink="projects"
+        routerLinkActive="active-link"
+        ariaCurrentWhenActive="page"
+        (click)="closeSidenavIfHandset()"
+      >
+        <mat-icon matListItemIcon>folder</mat-icon>
+        <span matListItemTitle>Projects</span>
+      </a>
+      <a
+        mat-list-item
         routerLink="kanban"
         routerLinkActive="active-link"
+        ariaCurrentWhenActive="page"
         (click)="closeSidenavIfHandset()"
       >
         <mat-icon matListItemIcon>view_kanban</mat-icon>
