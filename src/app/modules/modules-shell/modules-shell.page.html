@@ -73,7 +73,9 @@
       </div>
     }
 
-    <app-toolbar-project-picker class="shell-picker"></app-toolbar-project-picker>
+    @if (!sidebarCollapsed()) {
+      <app-toolbar-project-picker class="shell-picker"></app-toolbar-project-picker>
+    }
 
     <mat-nav-list id="shell-nav" class="shell-nav" aria-label="Menu principal">
       <a
