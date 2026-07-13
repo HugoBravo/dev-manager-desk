@@ -62,10 +62,11 @@
   <button
     mat-flat-button
     color="primary"
-    type="submit"
+    type="button"
     data-testid="dialog-save"
     [disabled]="projectForm().submitting() || projectForm().invalid()"
     [attr.aria-label]="title()"
+    (click)="onSubmit($event)"
   >
     @if (projectForm().submitting()) {
       <mat-progress-spinner diameter="18"></mat-progress-spinner>
