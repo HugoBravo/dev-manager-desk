@@ -1,23 +1,27 @@
 <h2 #titleRef mat-dialog-title id="project-editor-title" tabindex="-1">
-  {{ title }}
+  {{ title() }}
 </h2>
-<mat-dialog-content>
+<mat-dialog-content class="project-editor-content">
   <form
     novalidate
     (submit)="onSubmit($event)"
     aria-labelledby="project-editor-title"
     class="project-editor-form"
   >
-    <mat-form-field appearance="outline">
-      <mat-label>Name</mat-label>
+    <mat-form-field appearance="outline" class="project-editor-field">
       <input
         #nameInput
         matInput
         type="text"
         autocomplete="off"
+        placeholder="Project name"
+        aria-label="Project name"
         [formField]="projectForm.name"
         aria-describedby="name-errors"
       />
+      <mat-hint align="end" class="project-editor-counter">
+        {{ projectForm.name().value().length }} / {{ NAME_MAX }}
+      </mat-hint>
       @if (projectForm.name().errors().length > 0) {
         <mat-error id="name-errors">
           {{ projectForm.name().errors()[0].message }}
@@ -25,14 +29,18 @@
       }
     </mat-form-field>
 
-    <mat-form-field appearance="outline">
-      <mat-label>Description (optional)</mat-label>
+    <mat-form-field appearance="outline" class="project-editor-field">
       <textarea
         matInput
+        placeholder="Short description (optional)"
+        aria-label="Project description (optional)"
         [formField]="projectForm.description"
         rows="3"
         aria-describedby="description-errors"
       ></textarea>
+      <mat-hint align="end" class="project-editor-counter">
+        {{ projectForm.description().value().length }} / {{ DESCRIPTION_MAX }}
+      </mat-hint>
       @if (projectForm.description().errors().length > 0) {
         <mat-error id="description-errors">
           {{ projectForm.description().errors()[0].message }}
@@ -41,7 +49,7 @@
     </mat-form-field>
   </form>
 </mat-dialog-content>
-<mat-dialog-actions align="end">
+<mat-dialog-actions align="end" class="project-editor-actions">
   <button
     mat-button
     type="button"
@@ -57,13 +65,13 @@
     type="submit"
     data-testid="dialog-save"
     [disabled]="projectForm().submitting() || projectForm().invalid()"
-    [attr.aria-label]="title"
+    [attr.aria-label]="title()"
   >
     @if (projectForm().submitting()) {
       <mat-progress-spinner diameter="18"></mat-progress-spinner>
       <span>Saving…</span>
     } @else {
-      <span>Save</span>
+      <span>{{ submitLabel() }}</span>
     }
   </button>
 </mat-dialog-actions>

@@ -287,4 +287,82 @@ describe('ProjectEditorDialog', () => {
 
     expect(document.activeElement).toBe(triggerElement);
   });
+
+  // -------- WU-5: edit mode + prefill --------
+
+  it('edit mode prefills name + description from initial and exposes the Edit title', async () => {
+    const { fixture } = mountDialog({
+      mode: 'edit',
+      initial: { name: 'Original', description: 'Some notes' },
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.querySelector('#project-editor-title')?.textContent).toContain(
+      'Edit project',
+    );
+
+    const nameInput = host.querySelector<HTMLInputElement>('input[type="text"]');
+    expect(nameInput?.value).toBe('Original');
+
+    const descTextarea = host.querySelector<HTMLTextAreaElement>('textarea');
+    expect(descTextarea?.value).toBe('Some notes');
+  });
+
+  it('edit mode with null description normalizes to empty textarea', async () => {
+    const { fixture } = mountDialog({
+      mode: 'edit',
+      initial: { name: 'No desc', description: null },
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    const descTextarea = host.querySelector<HTMLTextAreaElement>('textarea');
+    expect(descTextarea?.value).toBe('');
+  });
+
+  it('edit mode submit returns the trimmed name and normalized description', async () => {
+    const { fixture, closeSpy } = mountDialog({
+      mode: 'edit',
+      initial: { name: 'Original', description: 'Old' },
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    const nameInput = host.querySelector<HTMLInputElement>('input[type="text"]')!;
+    setInputValue(nameInput, '  Renamed  ');
+    const textarea = host.querySelector<HTMLTextAreaElement>('textarea')!;
+    setInputValue(textarea, '  New notes  ');
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const form = host.querySelector<HTMLFormElement>('form')!;
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    await fixture.whenStable();
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(closeSpy).toHaveBeenCalledWith({
+      action: 'saved',
+      project: { name: 'Renamed', description: 'New notes' },
+    });
+  });
+
+  it('edit mode submit label reads "Save changes"', async () => {
+    const { fixture } = mountDialog({
+      mode: 'edit',
+      initial: { name: 'Original', description: null },
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const submit = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(
+      '[data-testid="dialog-save"]',
+    );
+    expect(submit?.textContent).toContain('Save changes');
+    expect(submit?.getAttribute('aria-label')).toBe('Edit project');
+  });
 });

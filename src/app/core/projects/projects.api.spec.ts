@@ -208,4 +208,110 @@ describe('ProjectsApi', () => {
 
     await expect(projectPromise).rejects.toMatchObject({ status: 0 });
   });
+
+  it('update() PATCHes /v1/projects/{id} and unwraps the envelope', async () => {
+    const patched = {
+      id: 7,
+      name: 'Renamed',
+      slug: 'renamed',
+      description: 'updated',
+      owner_id: 1,
+      archived_at: null,
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-02T00:00:00Z',
+    };
+
+    const projectPromise = firstValueFrom(
+      api.update(7, { name: 'Renamed', description: 'updated' }),
+    );
+
+    const req = httpMock.expectOne(
+      (r) =>
+        r.url === `${apiBaseUrl}/v1/projects/7` && r.method === 'PATCH',
+    );
+    expect(req.request.body).toEqual({ name: 'Renamed', description: 'updated' });
+    req.flush({ data: patched });
+
+    await expect(projectPromise).resolves.toEqual(patched);
+  });
+
+  it('archive() sends an ISO timestamp in archived_at', async () => {
+    const patched = {
+      id: 7,
+      name: 'P',
+      slug: 'p',
+      description: null,
+      owner_id: 1,
+      archived_at: '2026-01-02T00:00:00Z',
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-02T00:00:00Z',
+    };
+
+    const projectPromise = firstValueFrom(api.archive(7));
+
+    const req = httpMock.expectOne(
+      (r) =>
+        r.url === `${apiBaseUrl}/v1/projects/7` && r.method === 'PATCH',
+    );
+    const body = req.request.body as { archived_at: string };
+    expect(typeof body.archived_at).toBe('string');
+    // Sanity-check the timestamp parses as a Date.
+    expect(Number.isNaN(new Date(body.archived_at).getTime())).toBe(false);
+    req.flush({ data: patched });
+
+    await expect(projectPromise).resolves.toEqual(patched);
+  });
+
+  it('unarchive() sends archived_at: null', async () => {
+    const patched = {
+      id: 7,
+      name: 'P',
+      slug: 'p',
+      description: null,
+      owner_id: 1,
+      archived_at: null,
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-02T00:00:00Z',
+    };
+
+    const projectPromise = firstValueFrom(api.unarchive(7));
+
+    const req = httpMock.expectOne(
+      (r) =>
+        r.url === `${apiBaseUrl}/v1/projects/7` && r.method === 'PATCH',
+    );
+    expect(req.request.body).toEqual({ archived_at: null });
+    req.flush({ data: patched });
+
+    await expect(projectPromise).resolves.toEqual(patched);
+  });
+
+  it('delete() DELETEs /v1/projects/{id} and maps 204 to void', async () => {
+    const deletePromise = firstValueFrom(api.delete(7));
+
+    const req = httpMock.expectOne(
+      (r) =>
+        r.url === `${apiBaseUrl}/v1/projects/7` && r.method === 'DELETE',
+    );
+    req.flush(null, { status: 204, statusText: 'No Content' });
+
+    await expect(deletePromise).resolves.toBeUndefined();
+  });
+
+  it('update() propagates 422 validation errors as HttpErrorResponse', async () => {
+    const projectPromise = firstValueFrom(
+      api.update(7, { name: '' }),
+    );
+
+    const req = httpMock.expectOne(
+      (r) =>
+        r.url === `${apiBaseUrl}/v1/projects/7` && r.method === 'PATCH',
+    );
+    req.flush(
+      { message: 'The name field is required.', errors: { name: ['required'] } },
+      { status: 422, statusText: 'Unprocessable Entity' },
+    );
+
+    await expect(projectPromise).rejects.toMatchObject({ status: 422 });
+  });
 });

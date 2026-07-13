@@ -1,0 +1,43 @@
+:host {
+  display: block;
+  max-width: min(540px, 92vw);
+  padding: 8px 8px 4px;
+}
+
+.project-editor-content {
+  display: block;
+  padding-top: 8px;
+  padding-bottom: 16px;
+}
+
+.project-editor-form {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+.project-editor-field {
+  width: 100%;
+
+  // Tighten outline form-field so the dialog doesn't feel airy.
+  --mat-form-field-container-vertical-padding: 12px;
+}
+
+.project-editor-counter {
+  font: var(--mat-sys-label-small);
+  color: var(--mat-sys-on-surface-variant);
+  letter-spacing: 0.02em;
+}
+
+.project-editor-actions {
+  padding: 8px 0 4px;
+  gap: 8px;
+  border-top: 1px solid var(--mat-sys-outline-variant);
+  margin-top: 4px;
+
+  // Make the primary action the visual anchor without overweighting it.
+  [data-testid='dialog-save'] {
+    min-width: 132px;
+  }
+}

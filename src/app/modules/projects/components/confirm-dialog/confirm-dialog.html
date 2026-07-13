@@ -1,0 +1,55 @@
+<h2 mat-dialog-title id="confirm-dialog-title">{{ data.title }}</h2>
+<mat-dialog-content class="confirm-dialog-content">
+  <p class="confirm-dialog-message" id="confirm-dialog-message">{{ data.message }}</p>
+
+  @if (requiresTypeTheName()) {
+    <form
+      novalidate
+      (submit)="onConfirm($event)"
+      class="confirm-dialog-form"
+      aria-labelledby="confirm-dialog-title"
+      aria-describedby="confirm-dialog-message"
+    >
+      <mat-form-field appearance="outline" class="confirm-dialog-field">
+        <input
+          #confirmationInput
+          matInput
+          type="text"
+          autocomplete="off"
+          [formField]="confirmForm.confirmation"
+          [attr.aria-label]="'Type ' + expectedName() + ' to confirm deletion'"
+          data-testid="confirm-dialog-confirmation-input"
+        />
+        @if (confirmForm.confirmation().errors().length > 0) {
+          <mat-error>
+            {{ confirmForm.confirmation().errors()[0].message }}
+          </mat-error>
+        }
+      </mat-form-field>
+    </form>
+  }
+</mat-dialog-content>
+<mat-dialog-actions align="end" class="confirm-dialog-actions">
+  <button
+    #cancelButton
+    mat-button
+    type="button"
+    (click)="cancel()"
+    data-testid="confirm-dialog-cancel"
+    [attr.aria-label]="'Cancel ' + data.title"
+  >
+    Cancel
+  </button>
+  <button
+    #confirmButton
+    mat-flat-button
+    [color]="requiresTypeTheName() ? 'warn' : 'primary'"
+    type="button"
+    data-testid="confirm-dialog-confirm"
+    [disabled]="!canConfirm()"
+    [attr.aria-label]="confirmLabel()"
+    (click)="onConfirm($event)"
+  >
+    {{ confirmLabel() }}
+  </button>
+</mat-dialog-actions>

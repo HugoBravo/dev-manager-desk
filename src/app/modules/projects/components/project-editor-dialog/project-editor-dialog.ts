@@ -2,6 +2,7 @@ import {
   Component,
   ElementRef,
   OnInit,
+  computed,
   effect,
   inject,
   signal,
@@ -18,10 +19,11 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 /**
  * Data passed to {@link ProjectEditorDialog}.
  *
- * `mode` is currently fixed at `'create'` for this change — the dialog
- * carries only the create-mode contract. Future work can extend the
- * union (e.g. `'rename'`) without breaking the call site because
- * `ProjectEditorDialogData` is a typed argument to `dialog.open()`.
+ * `mode: 'create'` shows an empty form for a brand-new project.
+ * `mode: 'edit'` prefills the form from `initial` and lets the caller
+ * rename + change description on an existing project. Both modes share
+ * the same submit payload shape so the caller decides whether to POST
+ * or PATCH after `afterClosed()` emits.
  *
  * `triggerElement` is the element that opened the dialog; focus is
  * restored to it on close (WCAG AA focus management). The dialog does
@@ -29,8 +31,13 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
  * caller (ProjectsPage) does not need to wire its own focus hook.
  */
 export interface ProjectEditorDialogData {
-  readonly mode: 'create';
+  readonly mode: 'create' | 'edit';
   readonly triggerElement?: HTMLElement;
+  /**
+   * Prefill for `mode: 'edit'`. Ignored in `mode: 'create'`. `description`
+   * is normalized to `''` for the textarea (nullable on the wire).
+   */
+  readonly initial?: { readonly name: string; readonly description: string | null };
 }
 
 /**
@@ -94,6 +101,7 @@ interface WhitespaceOnlyError extends ValidationError.WithoutFieldTree {
     MatProgressSpinnerModule,
   ],
   templateUrl: './project-editor-dialog.html',
+  styleUrl: './project-editor-dialog.scss',
   host: {
     role: 'dialog',
     'aria-modal': 'true',
@@ -107,7 +115,12 @@ export class ProjectEditorDialog implements OnInit {
 
   protected readonly NAME_MAX = NAME_MAX;
   protected readonly DESCRIPTION_MAX = DESCRIPTION_MAX;
-  protected readonly title = 'New project';
+  protected readonly title = computed(() =>
+    this.data.mode === 'edit' ? 'Edit project' : 'New project',
+  );
+  protected readonly submitLabel = computed(() =>
+    this.data.mode === 'edit' ? 'Save changes' : 'Create project',
+  );
 
   protected readonly projectForm = form(
     signal<ProjectEditorModel>({ name: '', description: '' }),
@@ -161,6 +174,15 @@ export class ProjectEditorDialog implements OnInit {
   }
 
   ngOnInit(): void {
+    // Edit-mode prefill. Signal Forms reads the value signal at render
+    // time, so writing into the signal here seeds the inputs.
+    if (this.data.mode === 'edit' && this.data.initial) {
+      this.projectForm().value.set({
+        name: this.data.initial.name,
+        description: this.data.initial.description ?? '',
+      });
+    }
+
     // Focus management: move focus to the h2 first (Material default
     // focus trap is on the dialog container), then to the input on the
     // next microtask so the browser's focus ring renders correctly.

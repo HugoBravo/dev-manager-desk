@@ -55,6 +55,14 @@
   } @else {
     <header class="projects-header">
       <h1 class="projects-title">Projects</h1>
+      <mat-slide-toggle
+        data-testid="show-archived-toggle"
+        aria-label="Show archived projects"
+        [checked]="includeArchived()"
+        (change)="onToggleArchived()"
+      >
+        Show archived
+      </mat-slide-toggle>
       <button
         mat-flat-button
         color="primary"
@@ -70,15 +78,43 @@
     </header>
 
     <ul class="projects-list" aria-label="Projects">
-      @for (project of projects(); track project.id) {
+      @for (project of visibleProjects(); track project.id) {
         <li class="projects-list-item">
-          <mat-card appearance="outlined" class="project-card">
+          <mat-card
+            appearance="outlined"
+            class="project-card"
+            [class.archived]="project.archived_at !== null"
+            [attr.data-testid]="'project-card-' + project.id"
+          >
             <mat-card-header>
-              <mat-card-title>{{ project.name }}</mat-card-title>
+              <mat-card-title>
+                {{ project.name }}
+                @if (project.archived_at !== null) {
+                  <mat-chip
+                    class="archived-chip"
+                    disabled
+                    aria-label="Archived project"
+                    data-testid="archived-chip"
+                  >
+                    Archived
+                  </mat-chip>
+                }
+              </mat-card-title>
               @if (project.description) {
                 <mat-card-subtitle>{{ project.description }}</mat-card-subtitle>
               }
             </mat-card-header>
+            <mat-card-actions align="end">
+              <app-project-card-menu
+                [project]="project"
+                [mode]="project.archived_at !== null ? 'archived' : 'active'"
+                (edit)="onEdit($event)"
+                (archive)="onArchive($event)"
+                (unarchive)="onUnarchive($event)"
+                (delete)="onDelete($event)"
+                [attr.aria-disabled]="isSubmittingFor(project.id)"
+              />
+            </mat-card-actions>
           </mat-card>
         </li>
       }

@@ -1,18 +1,8 @@
-import {
-  Component,
-  DestroyRef,
-  computed,
-  inject,
-  signal,
-} from '@angular/core';
-import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
-import { BreakpointObserver, Breakpoints } from '@angular/cdk/layout';
+import { Component, computed, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatListModule } from '@angular/material/list';
 import { MatMenuModule } from '@angular/material/menu';
-import { MatSidenavModule } from '@angular/material/sidenav';
-import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 
@@ -20,15 +10,16 @@ import { AuthService } from '../../core/auth/auth.service';
 import { ThemeService, type ThemeMode } from '../../core/theme/theme.service';
 import { ToolbarProjectPickerComponent } from '../../layout/toolbar-project-picker/toolbar-project-picker.component';
 
+const APP_NAME = 'Dev Manager Desk';
+const APP_VERSION = '0.0.0';
+
 @Component({
   selector: 'app-modules-shell',
   imports: [
     MatButtonModule,
     MatIconModule,
     MatListModule,
-    MatSidenavModule,
     MatMenuModule,
-    MatToolbarModule,
     MatTooltipModule,
     RouterLink,
     RouterLinkActive,
@@ -39,12 +30,8 @@ import { ToolbarProjectPickerComponent } from '../../layout/toolbar-project-pick
   styleUrl: './modules-shell.page.scss',
 })
 export class ModulesShellPage {
-  private readonly breakpointObserver = inject(BreakpointObserver);
   private readonly auth = inject(AuthService);
   private readonly theme = inject(ThemeService);
-  private readonly destroyRef = inject(DestroyRef);
-
-  protected readonly sidenavOpened = signal(true);
 
   protected readonly themeMode = this.theme.mode;
 
@@ -74,30 +61,27 @@ export class ModulesShellPage {
     this.theme.set(mode);
   }
 
-  private readonly isHandsetSignal = toSignal(
-    this.breakpointObserver
-      .observe([Breakpoints.Handset, Breakpoints.Small])
-      .pipe(takeUntilDestroyed(this.destroyRef)),
-    { initialValue: { matches: false, breakpoints: {} } },
-  );
+  protected readonly sidebarCollapsed = signal(false);
 
-  protected readonly isHandset = computed(() => this.isHandsetSignal().matches);
-
-  protected readonly sidenavMode = computed<'over' | 'side'>(() =>
-    this.isHandset() ? 'over' : 'side',
-  );
+  protected toggleSidebar(): void {
+    this.sidebarCollapsed.update((v) => !v);
+  }
 
   protected readonly user = this.auth.user;
 
-  protected toggleSidenav(): void {
-    this.sidenavOpened.update((open) => !open);
-  }
+  protected readonly APP_NAME = APP_NAME;
+  protected readonly APP_VERSION = APP_VERSION;
 
-  protected closeSidenavIfHandset(): void {
-    if (this.isHandset()) {
-      this.sidenavOpened.set(false);
-    }
-  }
+  protected readonly userInitials = computed(() => {
+    const name = this.user()?.name ?? '';
+    return name
+      .trim()
+      .split(/\s+/)
+      .slice(0, 2)
+      .map((word) => word.charAt(0))
+      .join('')
+      .toUpperCase();
+  });
 
   protected logout(): void {
     this.auth.logout().subscribe();

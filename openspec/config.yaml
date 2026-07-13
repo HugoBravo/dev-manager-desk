@@ -1,0 +1,19 @@
+project: dev-manager-desk
+stack: angular-22
+persistence: hybrid
+strict_tdd: false
+testing:
+  runner: vitest
+  layers:
+    - unit
+  coverage: unknown
+conventions:
+  components: standalone
+  state: signals
+  change_detection: onpush-default
+  styling: scss + material-tokens
+  a11y: wcag-aa + axe
+  lint: prettier
+  no_standalone_flag: true
+  no_changepush_flag: true
+  host: host-object-not-decorators

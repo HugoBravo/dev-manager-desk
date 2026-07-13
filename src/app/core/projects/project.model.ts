@@ -12,3 +12,15 @@ export interface Project {
   readonly created_at: string;
   readonly updated_at: string;
 }
+
+/**
+ * Patch payload accepted by `ProjectsApi.update` and the service-level
+ * mutation wrappers. Every field is optional so callers can build partial
+ * updates (rename, archive, unarchive) without restating the whole record.
+ *
+ * `archived_at` accepts either a ISO timestamp (archive) or `null`
+ * (unarchive). The backend `UpdateProjectRequest` treats `null` as an
+ * explicit unarchive — omitting the field leaves the existing value
+ * untouched.
+ */
+export type ProjectPatch = Partial<Pick<Project, 'name' | 'description' | 'archived_at'>>;

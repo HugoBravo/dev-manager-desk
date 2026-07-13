@@ -1,0 +1,44 @@
+<button
+  mat-icon-button
+  type="button"
+  [matMenuTriggerFor]="menu"
+  aria-haspopup="menu"
+  [attr.aria-label]="triggerLabel()"
+  data-testid="project-card-menu-trigger"
+>
+  <mat-icon aria-hidden="true">more_vert</mat-icon>
+</button>
+
+<mat-menu #menu="matMenu">
+  <button
+    mat-menu-item
+    type="button"
+    data-testid="project-card-menu-edit"
+    (click)="onEdit($any($event.currentTarget))"
+  >
+    <mat-icon aria-hidden="true">edit</mat-icon>
+    <span>Edit</span>
+  </button>
+
+  <button
+    mat-menu-item
+    type="button"
+    data-testid="project-card-menu-archive"
+    (click)="onArchiveToggle($any($event.currentTarget))"
+  >
+    <mat-icon aria-hidden="true">
+      {{ mode() === 'archived' ? 'unarchive' : 'archive' }}
+    </mat-icon>
+    <span>{{ archiveLabel() }}</span>
+  </button>
+
+  <button
+    mat-menu-item
+    type="button"
+    data-testid="project-card-menu-delete"
+    (click)="onDelete($any($event.currentTarget))"
+  >
+    <mat-icon aria-hidden="true">delete</mat-icon>
+    <span>Delete</span>
+  </button>
+</mat-menu>

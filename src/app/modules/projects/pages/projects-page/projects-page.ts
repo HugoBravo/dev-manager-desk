@@ -2,20 +2,29 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
+import { MatChipsModule } from '@angular/material/chips';
 import { MatDialog } from '@angular/material/dialog';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { Router } from '@angular/router';
 
 import { ProjectService } from '../../../../core/projects/project.service';
 import { ErrorNormalizer } from '../../../../core/errors/error-normalizer';
 import type { ApiError } from '../../../../core/errors/api-error';
+import type { Project } from '../../../../core/projects/project.model';
 import {
   ProjectEditorDialog,
   type ProjectEditorDialogData,
   type ProjectEditorDialogResult,
 } from '../../components/project-editor-dialog/project-editor-dialog';
+import {
+  ConfirmDialog,
+  type ConfirmDialogData,
+  type ConfirmDialogResult,
+} from '../../components/confirm-dialog/confirm-dialog';
+import { ProjectCardMenu, type ProjectCardMenuEvent } from '../../components/project-card-menu/project-card-menu';
 
 /**
  * Top-level projects index page. Lists the authenticated user's projects
@@ -54,8 +63,11 @@ import {
   imports: [
     MatButtonModule,
     MatCardModule,
+    MatChipsModule,
     MatIconModule,
     MatProgressSpinnerModule,
+    MatSlideToggleModule,
+    ProjectCardMenu,
   ],
   templateUrl: './projects-page.html',
   host: {
@@ -72,7 +84,15 @@ export class ProjectsPage {
   protected readonly projects = this.projectsService.projects;
   protected readonly isBootstrapped = this.projectsService.isBootstrapped;
   protected readonly bootstrapError = this.projectsService.bootstrapError;
+  protected readonly includeArchived = this.projectsService.includeArchived;
   protected readonly isSubmitting = signal(false);
+
+  /**
+   * In-flight card ids. A `Set` keeps insertion order irrelevant for the
+   * small N we have here and lets the menu disable ONLY the in-flight
+   * card while siblings stay interactive.
+   */
+  protected readonly submittingIds = signal<ReadonlySet<number>>(new Set());
 
   protected readonly isBusy = computed(() => this.isSubmitting());
 
@@ -82,6 +102,19 @@ export class ProjectsPage {
       return ErrorNormalizer.toUserMessage(err);
     }
     return '';
+  });
+
+  /**
+   * Apply the visibility rule from REQ-5: archived projects show only
+   * when the toggle is on. Server already filtered the default list, so
+   * this computed is mainly relevant for the toggled view where archived
+   * rows coexist with active ones.
+   */
+  protected readonly visibleProjects = computed<readonly Project[]>(() => {
+    if (this.includeArchived()) {
+      return this.projects();
+    }
+    return this.projects().filter((p) => p.archived_at === null);
   });
 
   /**
@@ -153,4 +186,240 @@ export class ProjectsPage {
   protected retry(): void {
     void this.projectsService.bootstrap();
   }
+
+  /**
+   * Show-archived toggle handler. Delegates to the service so the
+   * bootstrap contract for the stored id is honored. The service
+   * surfaces network failures via `bootstrapError()` so we snackbar the
+   * normalized message instead of throwing.
+   */
+  protected async onToggleArchived(): Promise<void> {
+    await this.projectsService.toggleArchived();
+    const err = this.projectsService.bootstrapError();
+    if (err) {
+      this.snackBar.open(ErrorNormalizer.toUserMessage(err), 'Dismiss', {
+        duration: 4000,
+      });
+    }
+  }
+
+  protected onEdit(event: ProjectCardMenuEvent): void {
+    const { id, trigger } = event;
+    const project = this.projects().find((p) => p.id === id);
+    if (!project) {
+      // Stale reference; the menu was probably opened against a row
+      // that got removed while the dropdown was open. Nothing to edit.
+      return;
+    }
+    const data: ProjectEditorDialogData = {
+      mode: 'edit',
+      initial: { name: project.name, description: project.description },
+      triggerElement: trigger,
+    };
+    const ref = this.dialog.open<
+      ProjectEditorDialog,
+      ProjectEditorDialogData,
+      ProjectEditorDialogResult
+    >(ProjectEditorDialog, { data });
+    void firstValueFrom(ref.afterClosed()).then((result) => {
+      if (!result || result.action !== 'saved' || !result.project) {
+        return;
+      }
+      void this.handleEditSaved(id, result.project);
+    });
+  }
+
+  private async handleEditSaved(
+    id: number,
+    payload: { name: string; description: string | null },
+  ): Promise<void> {
+    this.setSubmitting(id, true);
+    try {
+      const updated = await this.projectsService.update(id, {
+        name: payload.name,
+        description: payload.description,
+      });
+      this.snackBar.open(`Project "${updated.name}" updated`, 'Dismiss', {
+        duration: 2500,
+      });
+    } catch (err) {
+      const apiError = toApiError(err);
+      this.snackBar.open(ErrorNormalizer.toUserMessage(apiError), 'Dismiss', {
+        duration: 4000,
+      });
+    } finally {
+      this.setSubmitting(id, false);
+    }
+  }
+
+  protected onArchive(event: ProjectCardMenuEvent): void {
+    const { id, trigger } = event;
+    const project = this.projects().find((p) => p.id === id);
+    if (!project) {
+      return;
+    }
+    const data: ConfirmDialogData = {
+      title: 'Archive project?',
+      message:
+        'You can restore it later from the archived list. Boards under this project stay intact.',
+      mode: 'archive',
+    };
+    const ref = this.dialog.open<
+      ConfirmDialog,
+      ConfirmDialogData,
+      ConfirmDialogResult
+    >(ConfirmDialog, { data });
+    void firstValueFrom(ref.afterClosed()).then((result) => {
+      if (!result?.confirmed) {
+        return;
+      }
+      void this.handleArchiveConfirmed(project, trigger);
+    });
+  }
+
+  private async handleArchiveConfirmed(
+    project: Project,
+    triggerElement: HTMLElement | undefined,
+  ): Promise<void> {
+    const id = project.id;
+    const name = project.name;
+    this.setSubmitting(id, true);
+    try {
+      await this.projectsService.archive(id);
+      const snackRef = this.snackBar.open(
+        `Project "${name}" archived`,
+        'Undo',
+        { duration: 10000 },
+      );
+      snackRef.onAction().subscribe(() => {
+        void this.projectsService.unarchive(id);
+      });
+      // Move focus back to the card menu trigger so keyboard users
+      // land on the still-visible card row.
+      triggerElement?.focus();
+    } catch (err) {
+      const apiError = toApiError(err);
+      this.snackBar.open(ErrorNormalizer.toUserMessage(apiError), 'Dismiss', {
+        duration: 4000,
+      });
+    } finally {
+      this.setSubmitting(id, false);
+    }
+  }
+
+  protected onUnarchive(event: ProjectCardMenuEvent): void {
+    const project = this.projects().find((p) => p.id === event.id);
+    if (!project) {
+      return;
+    }
+    void this.handleUnarchiveConfirmed(project);
+  }
+
+  private async handleUnarchiveConfirmed(project: Project): Promise<void> {
+    const id = project.id;
+    const name = project.name;
+    this.setSubmitting(id, true);
+    try {
+      await this.projectsService.unarchive(id);
+      this.snackBar.open(`Project "${name}" restored`, 'Dismiss', {
+        duration: 2500,
+      });
+    } catch (err) {
+      const apiError = toApiError(err);
+      this.snackBar.open(ErrorNormalizer.toUserMessage(apiError), 'Dismiss', {
+        duration: 4000,
+      });
+    } finally {
+      this.setSubmitting(id, false);
+    }
+  }
+
+  protected onDelete(event: ProjectCardMenuEvent): void {
+    const { id, trigger } = event;
+    const project = this.projects().find((p) => p.id === id);
+    if (!project) {
+      return;
+    }
+    const data: ConfirmDialogData = {
+      title: 'Delete project?',
+      message:
+        'This permanently deletes the project and all of its boards. This cannot be undone.',
+      mode: 'delete',
+      projectName: project.name,
+    };
+    const ref = this.dialog.open<
+      ConfirmDialog,
+      ConfirmDialogData,
+      ConfirmDialogResult
+    >(ConfirmDialog, { data });
+    void firstValueFrom(ref.afterClosed()).then((result) => {
+      if (!result?.confirmed) {
+        return;
+      }
+      void this.handleDeleteConfirmed(project, trigger);
+    });
+  }
+
+  private async handleDeleteConfirmed(
+    project: Project,
+    triggerElement: HTMLElement | undefined,
+  ): Promise<void> {
+    const id = project.id;
+    const name = project.name;
+    this.setSubmitting(id, true);
+    try {
+      await this.projectsService.delete(id);
+      this.snackBar.open(`Project "${name}" deleted`, 'Dismiss', {
+        duration: 2500,
+      });
+      // If the deleted project was the toolbar selection, the service
+      // already cleared the active signal + localStorage. Move focus
+      // back to the menu trigger so keyboard users don't get stranded
+      // on a now-empty page.
+      triggerElement?.focus();
+    } catch (err) {
+      const apiError = toApiError(err);
+      this.snackBar.open(ErrorNormalizer.toUserMessage(apiError), 'Dismiss', {
+        duration: 4000,
+      });
+    } finally {
+      this.setSubmitting(id, false);
+    }
+  }
+
+  /** Per-card submit guard. Disables the menu trigger while in flight. */
+  protected isSubmittingFor(id: number): boolean {
+    return this.submittingIds().has(id);
+  }
+
+  private setSubmitting(id: number, value: boolean): void {
+    this.submittingIds.update((set) => {
+      const next = new Set(set);
+      if (value) {
+        next.add(id);
+      } else {
+        next.delete(id);
+      }
+      return next;
+    });
+  }
+}
+
+/**
+ * Narrow an unknown error into the ApiError shape the snackbar expects.
+ * Mirrors the helper inside ProjectService so the page layer can render
+ * a normalized message without importing the service's private utils.
+ */
+function toApiError(err: unknown): ApiError {
+  if (err && typeof err === 'object' && 'kind' in err) {
+    return err as ApiError;
+  }
+  if (err && typeof err === 'object' && 'status' in err) {
+    return ErrorNormalizer.fromHttpErrorResponse(err as never);
+  }
+  return {
+    kind: 'network',
+    status: 0,
+    message: 'Could not reach the server. Check your connection and try again.',
+  };
 }

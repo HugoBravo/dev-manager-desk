@@ -13,8 +13,14 @@ import { ProjectService } from '../../../../core/projects/project.service';
 import type { Project } from '../../../../core/projects/project.model';
 import {
   ProjectEditorDialog,
+  type ProjectEditorDialogData,
   type ProjectEditorDialogResult,
 } from '../../components/project-editor-dialog/project-editor-dialog';
+import {
+  ConfirmDialog,
+  type ConfirmDialogData,
+  type ConfirmDialogResult,
+} from '../../components/confirm-dialog/confirm-dialog';
 import { ProjectsPage } from './projects-page';
 
 const API_BASE_URL = 'http://localhost:8000/api';
@@ -357,5 +363,379 @@ describe('ProjectsPage', () => {
 
     // Create should have been invoked exactly once (from the first click).
     expect(createSpy).toHaveBeenCalledTimes(1);
+  });
+
+  // -------- WU-8: edit / archive / unarchive / delete / toggleArchived --------
+
+  it('onEdit opens ProjectEditorDialog in edit mode with prefill from the current project', async () => {
+    const fixture = createComponent({ bootstrapResponse: 'one-project' });
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const dialog = TestBed.inject(MatDialog);
+    const dialogSpy = vi.spyOn(dialog, 'open');
+
+    const page = fixture.componentInstance;
+    (page as unknown as {
+      onEdit: (e: { id: number; trigger: HTMLElement }) => void;
+    }).onEdit({ id: 1, trigger: document.createElement('button') });
+
+    await fixture.whenStable();
+
+    const editorCall = dialogSpy.mock.calls.find(
+      (c) => c[0] === ProjectEditorDialog,
+    );
+    expect(editorCall).toBeDefined();
+    const data = editorCall![1]?.data as ProjectEditorDialogData | undefined;
+    expect(data?.mode).toBe('edit');
+    expect(data?.initial).toEqual({
+      name: 'Alpha',
+      description: null,
+    });
+  });
+
+  it('onEdit save calls ProjectService.update and shows a snackbar on success', async () => {
+    const fixture = createComponent({ bootstrapResponse: 'one-project' });
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const dialog = TestBed.inject(MatDialog);
+    const afterClosedSubject = new Subject<ProjectEditorDialogResult>();
+    vi.spyOn(dialog, 'open').mockReturnValue({
+      afterClosed: () => afterClosedSubject.asObservable(),
+      close: () => undefined,
+    } as MatDialogRef<unknown, unknown>);
+
+    const projectService = TestBed.inject(ProjectService);
+    const updateSpy = vi.spyOn(projectService, 'update');
+
+    const snackBar = TestBed.inject(MatSnackBar);
+    const snackSpy = vi.spyOn(snackBar, 'open');
+
+    const page = fixture.componentInstance;
+    (page as unknown as {
+      onEdit: (e: { id: number; trigger: HTMLElement }) => void;
+    }).onEdit({ id: 1, trigger: document.createElement('button') });
+
+    await fixture.whenStable();
+
+    afterClosedSubject.next({
+      action: 'saved',
+      project: { name: 'Renamed', description: 'Notes' },
+    });
+    afterClosedSubject.complete();
+    await fixture.whenStable();
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    fixture.detectChanges();
+
+    expect(updateSpy).toHaveBeenCalledWith(1, {
+      name: 'Renamed',
+      description: 'Notes',
+    });
+
+    const httpMock = TestBed.inject(HttpTestingController);
+    const req = httpMock.expectOne(`${API_BASE_URL}${API_PREFIX}/projects/1`);
+    expect(req.request.method).toBe('PATCH');
+    expect(req.request.body).toEqual({
+      name: 'Renamed',
+      description: 'Notes',
+    });
+    req.flush({
+      data: sampleProject({ id: 1, name: 'Renamed', description: 'Notes' }),
+    });
+    await fixture.whenStable();
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    fixture.detectChanges();
+
+    expect(snackSpy).toHaveBeenCalled();
+    httpMock.verify();
+  });
+
+  it('onArchive opens ConfirmDialog in archive mode and calls service.archive on confirm', async () => {
+    const fixture = createComponent({ bootstrapResponse: 'one-project' });
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const dialog = TestBed.inject(MatDialog);
+    const afterClosedSubject = new Subject<ConfirmDialogResult>();
+    const dialogSpy = vi.spyOn(dialog, 'open').mockReturnValue({
+      afterClosed: () => afterClosedSubject.asObservable(),
+      close: () => undefined,
+    } as MatDialogRef<unknown, unknown>);
+
+    const projectService = TestBed.inject(ProjectService);
+    const archiveSpy = vi
+      .spyOn(projectService, 'archive')
+      .mockResolvedValue(sampleProject({ id: 1, archived_at: '2026-01-02T00:00:00Z' }));
+
+    const page = fixture.componentInstance;
+    (page as unknown as {
+      onArchive: (e: { id: number; trigger: HTMLElement }) => void;
+    }).onArchive({ id: 1, trigger: document.createElement('button') });
+
+    await fixture.whenStable();
+
+    const confirmCall = dialogSpy.mock.calls.find(
+      (c) => c[0] === ConfirmDialog,
+    );
+    expect(confirmCall).toBeDefined();
+    expect((confirmCall![1]?.data as ConfirmDialogData).mode).toBe('archive');
+
+    afterClosedSubject.next({ confirmed: true });
+    afterClosedSubject.complete();
+    await fixture.whenStable();
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+    expect(archiveSpy).toHaveBeenCalledWith(1);
+  });
+
+  it('onDelete opens ConfirmDialog in delete mode with projectName and calls service.delete on confirm', async () => {
+    const fixture = createComponent({ bootstrapResponse: 'one-project' });
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const dialog = TestBed.inject(MatDialog);
+    const afterClosedSubject = new Subject<ConfirmDialogResult>();
+    const dialogSpy = vi.spyOn(dialog, 'open').mockReturnValue({
+      afterClosed: () => afterClosedSubject.asObservable(),
+      close: () => undefined,
+    } as MatDialogRef<unknown, unknown>);
+
+    const projectService = TestBed.inject(ProjectService);
+    const deleteSpy = vi
+      .spyOn(projectService, 'delete')
+      .mockResolvedValue(undefined);
+
+    const page = fixture.componentInstance;
+    (page as unknown as {
+      onDelete: (e: { id: number; trigger: HTMLElement }) => void;
+    }).onDelete({ id: 1, trigger: document.createElement('button') });
+
+    await fixture.whenStable();
+
+    const confirmCall = dialogSpy.mock.calls.find(
+      (c) => c[0] === ConfirmDialog,
+    );
+    expect(confirmCall).toBeDefined();
+    const data = confirmCall![1]?.data as ConfirmDialogData;
+    expect(data.mode).toBe('delete');
+    expect(data.projectName).toBe('Alpha');
+
+    afterClosedSubject.next({ confirmed: true });
+    afterClosedSubject.complete();
+    await fixture.whenStable();
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+    expect(deleteSpy).toHaveBeenCalledWith(1);
+  });
+
+  it('onUnarchive calls service.unarchive directly without opening a dialog', async () => {
+    const fixture = createComponent({ bootstrapResponse: 'one-project' });
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const dialog = TestBed.inject(MatDialog);
+    const openSpy = vi.spyOn(dialog, 'open');
+
+    const projectService = TestBed.inject(ProjectService);
+    const unarchiveSpy = vi
+      .spyOn(projectService, 'unarchive')
+      .mockResolvedValue(sampleProject({ id: 1 }));
+
+    const page = fixture.componentInstance;
+    (page as unknown as {
+      onUnarchive: (e: { id: number; trigger: HTMLElement }) => void;
+    }).onUnarchive({ id: 1, trigger: document.createElement('button') });
+
+    await fixture.whenStable();
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+    expect(unarchiveSpy).toHaveBeenCalledWith(1);
+    expect(openSpy).not.toHaveBeenCalled();
+  });
+
+  it('archive confirm shows an Undo snackbar whose action calls service.unarchive (REQ-2.2)', async () => {
+    const fixture = createComponent({ bootstrapResponse: 'one-project' });
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const dialog = TestBed.inject(MatDialog);
+    const afterClosedSubject = new Subject<ConfirmDialogResult>();
+    vi.spyOn(dialog, 'open').mockReturnValue({
+      afterClosed: () => afterClosedSubject.asObservable(),
+      close: () => undefined,
+    } as MatDialogRef<unknown, unknown>);
+
+    const projectService = TestBed.inject(ProjectService);
+    const archiveSpy = vi
+      .spyOn(projectService, 'archive')
+      .mockResolvedValue(
+        sampleProject({ id: 1, archived_at: '2026-01-02T00:00:00Z' }),
+      );
+    const unarchiveSpy = vi
+      .spyOn(projectService, 'unarchive')
+      .mockResolvedValue(sampleProject({ id: 1 }));
+
+    const snackBar = TestBed.inject(MatSnackBar);
+    const actionSubject = new Subject<undefined>();
+    const snackRef = {
+      onAction: () => actionSubject.asObservable(),
+    };
+    const openSpy = vi
+      .spyOn(snackBar, 'open')
+      .mockReturnValue(snackRef as unknown as ReturnType<typeof snackBar.open>);
+
+    const page = fixture.componentInstance;
+    (page as unknown as {
+      onArchive: (e: { id: number; trigger: HTMLElement }) => void;
+    }).onArchive({ id: 1, trigger: document.createElement('button') });
+
+    await fixture.whenStable();
+
+    afterClosedSubject.next({ confirmed: true });
+    afterClosedSubject.complete();
+    await fixture.whenStable();
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+    expect(archiveSpy).toHaveBeenCalledWith(1);
+
+    // Find the Undo snackbar call and verify it was opened with
+    // duration=10000 and the Undo label.
+    const undoCall = openSpy.mock.calls.find(
+      (c) => c[1] === 'Undo' && (c[2] as { duration: number }).duration === 10000,
+    );
+    expect(undoCall).toBeDefined();
+
+    // Drive the action observable and assert unarchive fires.
+    actionSubject.next(undefined);
+    actionSubject.complete();
+    await fixture.whenStable();
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+    expect(unarchiveSpy).toHaveBeenCalledWith(1);
+  });
+
+  it('Show-archived toggle calls ProjectService.toggleArchived', async () => {
+    const fixture = createComponent({ bootstrapResponse: 'one-project' });
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const projectService = TestBed.inject(ProjectService);
+    const toggleSpy = vi
+      .spyOn(projectService, 'toggleArchived')
+      .mockResolvedValue(undefined);
+
+    const page = fixture.componentInstance;
+    (page as unknown as { onToggleArchived: () => Promise<void> }).onToggleArchived();
+    await fixture.whenStable();
+
+    expect(toggleSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('onEdit save on 422 surfaces a snackbar and does not mutate the visible list', async () => {
+    // REQ-1.3: a server 422 on edit must show the user a snackbar with
+    // the normalized message and leave the list untouched.
+    const fixture = createComponent({ bootstrapResponse: 'one-project' });
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const dialog = TestBed.inject(MatDialog);
+    const afterClosedSubject = new Subject<ProjectEditorDialogResult>();
+    vi.spyOn(dialog, 'open').mockReturnValue({
+      afterClosed: () => afterClosedSubject.asObservable(),
+      close: () => undefined,
+    } as MatDialogRef<unknown, unknown>);
+
+    const snackBar = TestBed.inject(MatSnackBar);
+    const snackSpy = vi.spyOn(snackBar, 'open');
+
+    const page = fixture.componentInstance;
+    (page as unknown as {
+      onEdit: (e: { id: number; trigger: HTMLElement }) => void;
+    }).onEdit({ id: 1, trigger: document.createElement('button') });
+    await fixture.whenStable();
+
+    afterClosedSubject.next({
+      action: 'saved',
+      project: { name: 'Bad', description: null },
+    });
+    afterClosedSubject.complete();
+    await fixture.whenStable();
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    fixture.detectChanges();
+
+    const httpMock = TestBed.inject(HttpTestingController);
+    const req = httpMock.expectOne(`${API_BASE_URL}${API_PREFIX}/projects/1`);
+    req.flush(
+      { message: 'invalid', errors: { name: ['too long'] } },
+      { status: 422, statusText: 'Unprocessable Entity' },
+    );
+    await fixture.whenStable();
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    fixture.detectChanges();
+
+    expect(snackSpy).toHaveBeenCalled();
+    // List untouched (service.update rolls back on non-404 errors).
+    const projectService = TestBed.inject(ProjectService);
+    expect(projectService.projects().map((p) => p.name)).toEqual(['Alpha']);
+    httpMock.verify();
+  });
+
+  it('renders the show-archived toggle in the page header', async () => {
+    const fixture = createComponent({ bootstrapResponse: 'one-project' });
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    const toggle = host.querySelector(
+      '[data-testid="show-archived-toggle"]',
+    );
+    expect(toggle).not.toBeNull();
+  });
+
+  it('archived cards render the archived badge and .archived class', async () => {
+    const fixture = createComponent({ bootstrapResponse: 'one-project' });
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const projectService = TestBed.inject(ProjectService);
+    // Force the include_archived flag + seed an archived row directly.
+    (projectService as unknown as {
+      _includeArchived: { set: (v: boolean) => void };
+    })._includeArchived.set(true);
+    (projectService as unknown as {
+      _projects: { set: (v: Project[]) => void };
+    })._projects.set([
+      sampleProject({ id: 1, name: 'Alpha' }),
+      sampleProject({
+        id: 2,
+        name: 'Bravo',
+        archived_at: '2026-01-02T00:00:00Z',
+      }),
+    ]);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const host = fixture.nativeElement as HTMLElement;
+    const archivedCards = host.querySelectorAll(
+      'mat-card[data-testid^="project-card-"]',
+    );
+    expect(archivedCards.length).toBe(2);
+    const archivedBadge = host.querySelector('[data-testid="archived-chip"]');
+    expect(archivedBadge).not.toBeNull();
+    const archivedCard = host.querySelector(
+      '[data-testid="project-card-2"]',
+    );
+    expect(archivedCard?.classList.contains('archived')).toBe(true);
   });
 });
