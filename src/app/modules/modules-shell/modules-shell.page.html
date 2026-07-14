@@ -1,5 +1,18 @@
 <div class="shell-layout">
   <header class="shell-header">
+    <button
+      mat-icon-button
+      type="button"
+      class="shell-sidebar-toggle"
+      (click)="toggleSidebar()"
+      [attr.aria-expanded]="!sidebarCollapsed()"
+      aria-controls="shell-nav"
+      [attr.aria-label]="sidebarCollapsed() ? 'Expandir menu' : 'Colapsar menu'"
+      matTooltip="Menu"
+    >
+      <mat-icon>menu</mat-icon>
+    </button>
+
     <span class="shell-title">{{ APP_NAME }}</span>
 
     <span class="shell-spacer"></span>
@@ -46,18 +59,6 @@
   </header>
 
   <aside class="shell-sidebar" [class.collapsed]="sidebarCollapsed()" aria-label="Menu principal">
-    <button
-      mat-icon-button
-      type="button"
-      class="shell-sidebar-toggle"
-      (click)="toggleSidebar()"
-      [attr.aria-expanded]="!sidebarCollapsed()"
-      aria-controls="shell-nav"
-      [attr.aria-label]="sidebarCollapsed() ? 'Expandir menu' : 'Colapsar menu'"
-    >
-      <mat-icon>menu</mat-icon>
-    </button>
-
     @if (user(); as currentUser) {
       <div class="shell-user-header">
         <div class="shell-avatar" aria-hidden="true">
