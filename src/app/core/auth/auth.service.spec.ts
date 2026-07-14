@@ -25,6 +25,7 @@ const fakeUser: User = {
   email: 'hugo@example.com',
   name: 'Hugo',
   email_verified_at: '2026-01-01T00:00:00Z',
+  is_admin: false,
 };
 
 function flushMicrotasks(): Promise<void> {

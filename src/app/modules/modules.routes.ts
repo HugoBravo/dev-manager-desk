@@ -21,6 +21,10 @@ export const MODULES_ROUTES: Routes = [
         path: 'secrets',
         loadChildren: () => import('./secrets/secrets.routes').then((m) => m.SECRETS_ROUTES),
       },
+      {
+        path: 'users',
+        loadChildren: () => import('./users/users.routes').then((m) => m.USERS_ROUTES),
+      },
       { path: '', pathMatch: 'full', redirectTo: 'kanban' },
     ],
   },

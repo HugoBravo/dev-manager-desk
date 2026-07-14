@@ -1,0 +1,34 @@
+<section class="user-edit" aria-labelledby="user-edit-title">
+  <header class="user-edit-header">
+    <h1 id="user-edit-title" class="user-edit-title">
+      @if (isNew()) {
+        New user
+      } @else if (user(); as u) {
+        Editing {{ u.email }}
+      } @else {
+        Loading…
+      }
+    </h1>
+    <button mat-button type="button" (click)="onCancel()" data-testid="user-edit-cancel">
+      Cancel
+    </button>
+  </header>
+
+  @if (loadError(); as error) {
+    <p class="user-edit-load-error" role="alert" data-testid="user-edit-load-error">
+      {{ error }}
+    </p>
+  } @else if (loading() && !isNew()) {
+    <p class="user-edit-loading" aria-live="polite">Loading user…</p>
+  } @else if (isNew() || user()) {
+    <app-user-form
+      [initialValue]="initialValue()"
+      [errors]="errors()"
+      [isAdmin]="isAdmin()"
+      [isSelf]="isSelf()"
+      [submitting]="submitting()"
+      (submitted)="onSubmit($event)"
+      data-testid="user-edit-form"
+    />
+  }
+</section>

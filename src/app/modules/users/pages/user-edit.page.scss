@@ -1,0 +1,22 @@
+.user-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 24px;
+}
+
+.user-edit-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.user-edit-title {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.user-edit-load-error {
+  color: var(--mat-sys-error, #d32f2f);
+}

@@ -3,6 +3,13 @@ export interface User {
   readonly email: string;
   readonly name: string;
   readonly email_verified_at: string | null;
+  /**
+   * Mirrors `users.is_admin` from the backend. Optional for backward
+   * compatibility with cached sessions that predate the
+   * `user-administration` capability — `AuthService` treats `undefined`
+   * as `false`.
+   */
+  readonly is_admin?: boolean;
 }
 
 export interface AuthTokens {

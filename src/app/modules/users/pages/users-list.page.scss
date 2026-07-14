@@ -1,0 +1,44 @@
+.users-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 24px;
+}
+
+.users-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.users-list-title {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.users-list-table {
+  width: 100%;
+}
+
+.users-list-table tr[role='button']:hover {
+  background: var(--mat-sys-surface-container-low, rgba(0, 0, 0, 0.04));
+  cursor: pointer;
+}
+
+.users-list-table tr[role='button']:focus-visible {
+  outline: 2px solid var(--mat-sys-primary, currentColor);
+  outline-offset: -2px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

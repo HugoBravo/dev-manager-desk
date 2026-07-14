@@ -130,9 +130,7 @@ export class AuthService {
 
     // Best-effort server-side logout. Even if it fails (token already revoked,
     // network down, etc.) we have already cleared local state.
-    return this.api.logout().pipe(
-      catchError(() => of(undefined)),
-    );
+    return this.api.logout().pipe(catchError(() => of(undefined)));
   }
 
   /**
@@ -160,13 +158,10 @@ export class AuthService {
 
     if (error.status === 422) {
       const body = error.error as
-        | { message?: string; errors?: Record<string, string[]> }
-        | undefined;
+        { message?: string; errors?: Record<string, string[]> } | undefined;
       const fieldErrors = body?.errors;
       const message =
-        (fieldErrors && firstFieldMessage(fieldErrors)) ??
-        body?.message ??
-        'Datos invalidos.';
+        (fieldErrors && firstFieldMessage(fieldErrors)) ?? body?.message ?? 'Datos invalidos.';
       return {
         ok: false,
         error: message,
@@ -231,9 +226,8 @@ export class AuthService {
           email: parsed.email,
           name: parsed.name,
           email_verified_at:
-            typeof parsed.email_verified_at === 'string'
-              ? parsed.email_verified_at
-              : null,
+            typeof parsed.email_verified_at === 'string' ? parsed.email_verified_at : null,
+          is_admin: parsed.is_admin === true,
         };
       }
       return null;

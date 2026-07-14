@@ -117,6 +117,18 @@
       </a>
       <a
         mat-list-item
+        routerLink="users"
+        routerLinkActive="active-link"
+        ariaCurrentWhenActive="page"
+        aria-label="Users"
+      >
+        <mat-icon matListItemIcon>group</mat-icon>
+        @if (!sidebarCollapsed()) {
+          <span matListItemTitle>USERS</span>
+        }
+      </a>
+      <a
+        mat-list-item
         class="shell-logout-link"
         type="button"
         (click)="logout()"

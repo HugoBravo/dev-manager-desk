@@ -1,0 +1,115 @@
+<form class="user-form" novalidate (submit)="onSubmit($event)" aria-labelledby="user-form-title">
+  <h2 id="user-form-title" class="user-form-title">User</h2>
+
+  @if (errors()._form; as formError) {
+    <p
+      class="user-form-form-error"
+      role="alert"
+      [id]="formErrorId()"
+      data-testid="user-form-form-error"
+    >
+      {{ formError }}
+    </p>
+  }
+
+  <mat-form-field appearance="outline" class="user-form-field">
+    <mat-label for="name">Name</mat-label>
+    <input
+      matInput
+      type="text"
+      [id]="nameId"
+      name="name"
+      autocomplete="name"
+      required
+      [attr.aria-invalid]="!!errors().name"
+      [attr.aria-describedby]="errors().name ? nameErrorId() : null"
+      [value]="_name()"
+      (input)="onNameInput($any($event.target).value)"
+      data-testid="user-form-name"
+    />
+    @if (errors().name; as nameError) {
+      <mat-error [id]="nameErrorId()">{{ nameError }}</mat-error>
+    }
+  </mat-form-field>
+
+  <mat-form-field appearance="outline" class="user-form-field">
+    <mat-label for="email">Email</mat-label>
+    <input
+      matInput
+      type="email"
+      [id]="emailId"
+      name="email"
+      autocomplete="email"
+      [readonly]="!canEditEmail()"
+      [required]="canEditEmail()"
+      [attr.aria-invalid]="!!errors().email"
+      [attr.aria-describedby]="errors().email ? emailErrorId() : null"
+      [value]="_email()"
+      (input)="onEmailInput($any($event.target).value)"
+      data-testid="user-form-email"
+    />
+    @if (!canEditEmail()) {
+      <mat-hint>Email changes are reserved for administrators.</mat-hint>
+    }
+    @if (errors().email; as emailError) {
+      <mat-error [id]="emailErrorId()">{{ emailError }}</mat-error>
+    }
+  </mat-form-field>
+
+  <mat-form-field appearance="outline" class="user-form-field">
+    <mat-label for="password">Password</mat-label>
+    <input
+      matInput
+      type="password"
+      [id]="passwordId"
+      name="password"
+      autocomplete="new-password"
+      [attr.aria-invalid]="!!errors().password"
+      [attr.aria-describedby]="errors().password ? passwordErrorId() : null"
+      [value]="_password()"
+      (input)="onPasswordInput($any($event.target).value)"
+      data-testid="user-form-password"
+    />
+    @if (requirePassword()) {
+      <mat-hint>Required when creating a user.</mat-hint>
+    } @else {
+      <mat-hint>Leave blank to keep the current password.</mat-hint>
+    }
+    @if (errors().password; as passwordError) {
+      <mat-error [id]="passwordErrorId()">{{ passwordError }}</mat-error>
+    }
+  </mat-form-field>
+
+  @if (canEditIsAdmin()) {
+    <mat-checkbox
+      [id]="isAdminId"
+      name="is_admin"
+      [checked]="_isAdmin()"
+      (change)="onIsAdminChange($event)"
+      [attr.aria-describedby]="errors().is_admin ? isAdminErrorId() : null"
+      data-testid="user-form-is-admin"
+    >
+      Administrator
+    </mat-checkbox>
+    @if (errors().is_admin; as isAdminError) {
+      <mat-error [id]="isAdminErrorId()">{{ isAdminError }}</mat-error>
+    }
+  }
+
+  <div class="user-form-actions">
+    <button
+      mat-flat-button
+      color="primary"
+      type="submit"
+      [disabled]="submitting()"
+      data-testid="user-form-submit"
+    >
+      @if (submitting()) {
+        <span aria-hidden="true">Saving…</span>
+        <span class="visually-hidden">Saving changes</span>
+      } @else {
+        Save
+      }
+    </button>
+  </div>
+</form>

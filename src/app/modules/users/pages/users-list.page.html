@@ -1,0 +1,89 @@
+<section class="users-list" aria-labelledby="users-list-title">
+  <header class="users-list-header">
+    <h1 id="users-list-title" class="users-list-title">Users</h1>
+    @if (isAdmin()) {
+      <button
+        mat-flat-button
+        color="primary"
+        type="button"
+        (click)="onCreate()"
+        data-testid="users-list-create"
+      >
+        <mat-icon aria-hidden="true">add</mat-icon>
+        New user
+      </button>
+    }
+  </header>
+
+  <p class="visually-hidden" aria-live="polite">{{ statusMessage() }}</p>
+
+  @if (isEmpty()) {
+    <mat-card class="users-list-empty" data-testid="users-list-empty">
+      <mat-card-content>
+        <p>No users yet. Create one to get started.</p>
+      </mat-card-content>
+    </mat-card>
+  } @else {
+    <table mat-table [dataSource]="users()" class="users-list-table" data-testid="users-list-table">
+      <caption class="visually-hidden">
+        Application users
+      </caption>
+      <ng-container matColumnDef="name">
+        <th mat-header-cell scope="col" *matHeaderCellDef>Name</th>
+        <td mat-cell *matCellDef="let user">{{ user.name }}</td>
+      </ng-container>
+      <ng-container matColumnDef="email">
+        <th mat-header-cell scope="col" *matHeaderCellDef>Email</th>
+        <td mat-cell *matCellDef="let user">{{ user.email }}</td>
+      </ng-container>
+      <ng-container matColumnDef="is_admin">
+        <th mat-header-cell scope="col" *matHeaderCellDef>Admin</th>
+        <td mat-cell *matCellDef="let user">
+          @if (user.is_admin) {
+            <mat-icon aria-label="Yes">check_circle</mat-icon>
+          } @else {
+            <mat-icon aria-label="No">remove_circle_outline</mat-icon>
+          }
+        </td>
+      </ng-container>
+      <ng-container matColumnDef="actions">
+        <th mat-header-cell scope="col" *matHeaderCellDef>
+          <span class="visually-hidden">Actions</span>
+        </th>
+        <td mat-cell *matCellDef="let user">
+          <button
+            mat-button
+            type="button"
+            (click)="onRowSelect(user)"
+            [attr.aria-label]="'Edit ' + user.name"
+            data-testid="users-list-row-edit"
+          >
+            Edit
+          </button>
+          @if (isAdmin()) {
+            <button
+              mat-button
+              color="warn"
+              type="button"
+              (click)="onDelete(user, $event)"
+              [attr.aria-label]="'Delete ' + user.email"
+              data-testid="users-list-row-delete"
+            >
+              Delete
+            </button>
+          }
+        </td>
+      </ng-container>
+      <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+      <tr
+        mat-row
+        *matRowDef="let row; columns: displayedColumns"
+        tabindex="0"
+        role="button"
+        (click)="onRowSelect(row)"
+        (keydown)="onRowKeydown($event, row)"
+        [attr.aria-label]="'Edit ' + row.name"
+      ></tr>
+    </table>
+  }
+</section>
