@@ -102,6 +102,17 @@
       </a>
       <a
         mat-list-item
+        routerLink="secrets"
+        routerLinkActive="active-link"
+        ariaCurrentWhenActive="page"
+      >
+        <mat-icon matListItemIcon>lock</mat-icon>
+        @if (!sidebarCollapsed()) {
+          <span matListItemTitle>Secrets</span>
+        }
+      </a>
+      <a
+        mat-list-item
         class="shell-logout-link"
         type="button"
         (click)="logout()"

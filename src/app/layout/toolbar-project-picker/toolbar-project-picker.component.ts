@@ -32,12 +32,7 @@ import { ProjectService } from '../../core/projects/project.service';
  */
 @Component({
   selector: 'app-toolbar-project-picker',
-  imports: [
-    MatFormFieldModule,
-    MatOptionModule,
-    MatProgressBarModule,
-    MatSelectModule,
-  ],
+  imports: [MatFormFieldModule, MatOptionModule, MatProgressBarModule, MatSelectModule],
   templateUrl: './toolbar-project-picker.component.html',
   styleUrl: './toolbar-project-picker.component.scss',
   host: {
@@ -76,31 +71,53 @@ export class ToolbarProjectPickerComponent {
       if (project === null) {
         return;
       }
-      const target = `/modules/kanban/projects/${project.id}/boards`;
-      // Only navigate when we're not already on a kanban-board route for this
-      // project. Avoids loop on initial bootstrap and avoids pushing history
-      // entries on every navigation that lands back on the shell.
-      if (url.startsWith(target)) {
+      // Two landing routes live under the shell: the kanban feature
+      // lands at `/modules/kanban/projects/:id/boards`, the secrets
+      // feature lands at `/modules/secrets/projects/:id`. Pick the
+      // landing that matches the URL the user is already on so we
+      // don't yank them out of the feature they were using.
+      const targetBase = isSecretsLanding(url)
+        ? `/modules/secrets/projects/${project.id}`
+        : `/modules/kanban/projects/${project.id}/boards`;
+      // Only navigate when we're not already on the target route for
+      // this project. Avoids loop on initial bootstrap and avoids
+      // pushing history entries on every navigation that lands back
+      // on the shell.
+      if (url.startsWith(targetBase)) {
         return;
       }
-      // Navigate only when we're on the kanban landing (`/modules/kanban` or
-      // `/modules/kanban/projects`). Other routes (board detail, login, etc.)
-      // are left alone — the user may be navigating with intent.
       if (
         url === '/modules/kanban' ||
         url === '/modules/kanban/' ||
         url === '/modules/kanban/projects' ||
-        url === '/modules/kanban/projects/'
+        url === '/modules/kanban/projects/' ||
+        url === '/modules/secrets' ||
+        url === '/modules/secrets/' ||
+        url === '/modules/secrets/projects' ||
+        url === '/modules/secrets/projects/'
       ) {
-        void this.router.navigateByUrl(target);
+        void this.router.navigateByUrl(targetBase);
       }
     });
   }
 
   protected onSelectionChange(projectId: number): void {
-    const project =
-      this.projects().find((p) => p.id === projectId) ?? null;
+    const project = this.projects().find((p) => p.id === projectId) ?? null;
     this.projectService.setActive(project);
     // The `effect()` above handles the navigation. No navigation here.
   }
+}
+
+/**
+ * `true` when the current URL is under the secrets feature so the
+ * picker picks the secrets landing route (instead of the default kanban
+ * boards landing). Detects both the empty landing and the per-project
+ * list — anything under `/modules/secrets` is fair game.
+ */
+function isSecretsLanding(url: string): boolean {
+  return (
+    url === '/modules/secrets' ||
+    url === '/modules/secrets/' ||
+    url.startsWith('/modules/secrets/projects')
+  );
 }
