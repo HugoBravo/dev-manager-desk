@@ -294,4 +294,54 @@ describe('SecretEditorDialog', () => {
     await new Promise<void>((resolve) => queueMicrotask(resolve));
     expect(document.activeElement).toBe(triggerElement);
   });
+
+  it('accepts special characters in the value field without rejecting the secret', async () => {
+    const { fixture, closeSpy } = mountDialog({ mode: 'create', projectId: 7 });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const page = fixture.componentInstance;
+    page.setFormValue({
+      key: 'STRIPE_KEY',
+      value: 'B4hGC#q8(J3v & N%(y&[V2W.u[',
+      description: '',
+    });
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(page.formForTest.valid()).toBe(true);
+    const submit = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(
+      '[data-testid="secret-editor-save"]',
+    );
+    expect(submit?.disabled).toBe(false);
+
+    await page.submitForTestForce();
+    await fixture.whenStable();
+
+    expect(closeSpy).toHaveBeenCalledWith({
+      action: 'saved',
+      secretId: undefined,
+      payload: {
+        key: 'STRIPE_KEY',
+        value: 'B4hGC#q8(J3v & N%(y&[V2W.u[',
+        description: null,
+      },
+    });
+  });
+
+  it('focuses the value input before the key input when opening in create mode', async () => {
+    const { fixture } = mountDialog({ mode: 'create', projectId: 7 });
+    await fixture.whenStable();
+    fixture.detectChanges();
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    const valueInput = host.querySelector<HTMLInputElement>(
+      '[data-testid="secret-editor-value-input"]',
+    );
+    expect(valueInput).not.toBeNull();
+    expect(document.activeElement).toBe(valueInput);
+  });
 });

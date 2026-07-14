@@ -2,6 +2,7 @@ import {
   Component,
   ElementRef,
   OnInit,
+  afterNextRender,
   computed,
   effect,
   inject,
@@ -180,6 +181,15 @@ export class SecretEditorDialog implements OnInit {
         this.triggerElement?.focus();
       });
     }
+
+    afterNextRender(() => {
+      queueMicrotask(() => {
+        this.titleRef()?.nativeElement.focus();
+        queueMicrotask(() => {
+          this.valueInputRef()?.nativeElement.focus();
+        });
+      });
+    });
   }
 
   ngOnInit(): void {
@@ -190,17 +200,6 @@ export class SecretEditorDialog implements OnInit {
         description: this.data.secret.description ?? '',
       });
     }
-
-    queueMicrotask(() => {
-      this.titleRef()?.nativeElement.focus();
-      queueMicrotask(() => {
-        if (this.isEdit()) {
-          this.valueInputRef()?.nativeElement.focus();
-        } else {
-          this.keyInputRef()?.nativeElement.focus();
-        }
-      });
-    });
   }
 
   protected toggleVisibility(): void {
