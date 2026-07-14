@@ -109,6 +109,47 @@ function mountPage(projectId = 7): MountResult {
 describe('SecretsListPage', () => {
   afterEach(() => window.localStorage.clear());
 
+  it('refetches when projectId input changes from 1 to 2 (regression: project switch on Secrets)', async () => {
+    const { fixture } = mountPage(1);
+    const httpMock = TestBed.inject(HttpTestingController);
+    httpMock.expectOne(COLLECTION_URL(1)).flush(wrapped([secret({ id: 1, project_id: 1 })]));
+    await fixture.whenStable();
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const projectService = TestBed.inject(ProjectService);
+    (
+      projectService as unknown as {
+        _projects: { set: (v: Project[]) => void };
+      }
+    )._projects.set([
+      { ...sampleProject, id: 1 },
+      { ...sampleProject, id: 2, slug: 'beta', name: 'Beta' },
+    ]);
+    (
+      projectService as unknown as {
+        _currentId: { set: (v: number | null) => void };
+      }
+    )._currentId.set(2);
+
+    fixture.componentRef.setInput('projectId', '2');
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const req = httpMock.expectOne(COLLECTION_URL(2));
+    expect(req.request.method).toBe('GET');
+    req.flush(wrapped([secret({ id: 10, project_id: 2, key: 'B_KEY' })]));
+    await fixture.whenStable();
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.querySelectorAll('app-secret-card').length).toBe(1);
+    expect(host.textContent).toContain('B_KEY');
+  });
+
   it('renders the empty state when no secrets are returned', async () => {
     const { fixture } = mountPage();
     fixture.detectChanges();

@@ -83,10 +83,11 @@
         routerLink="projects"
         routerLinkActive="active-link"
         ariaCurrentWhenActive="page"
+        aria-label="Projects"
       >
         <mat-icon matListItemIcon>folder</mat-icon>
         @if (!sidebarCollapsed()) {
-          <span matListItemTitle>Projects</span>
+          <span matListItemTitle>PROJECTS</span>
         }
       </a>
       <a
@@ -94,6 +95,7 @@
         routerLink="kanban"
         routerLinkActive="active-link"
         ariaCurrentWhenActive="page"
+        aria-label="Kanban"
       >
         <mat-icon matListItemIcon>view_kanban</mat-icon>
         @if (!sidebarCollapsed()) {
@@ -105,10 +107,11 @@
         routerLink="secrets"
         routerLinkActive="active-link"
         ariaCurrentWhenActive="page"
+        aria-label="Secrets"
       >
         <mat-icon matListItemIcon>lock</mat-icon>
         @if (!sidebarCollapsed()) {
-          <span matListItemTitle>Secrets</span>
+          <span matListItemTitle>SECRETS</span>
         }
       </a>
       <a
