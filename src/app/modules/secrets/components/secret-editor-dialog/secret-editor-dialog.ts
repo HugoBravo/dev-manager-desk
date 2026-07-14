@@ -9,15 +9,7 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
-import {
-  FormField,
-  form,
-  maxLength,
-  pattern,
-  required,
-  submit,
-  validate,
-} from '@angular/forms/signals';
+import { FormField, form, maxLength, pattern, required, validate } from '@angular/forms/signals';
 import type { ValidationError } from '@angular/forms/signals';
 import { MatButtonModule } from '@angular/material/button';
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
@@ -216,26 +208,25 @@ export class SecretEditorDialog implements OnInit {
 
   protected async onSubmit(event: Event): Promise<void> {
     event.preventDefault();
-    const submitted = await submit(this.secretForm, async () => {
-      const { key, value, description } = this.secretForm().value();
-      const trimmedKey = key.trim();
-      const trimmedValue = value;
-      if (!trimmedKey || !trimmedValue) {
-        return;
-      }
-      const normalizedDescription = description.trim();
-      this.ref.close({
-        action: 'saved',
-        secretId: this.data.secret?.id,
-        payload: {
-          key: trimmedKey,
-          value: trimmedValue,
-          description: normalizedDescription.length === 0 ? null : normalizedDescription,
-        },
-      });
+    if (this.secretForm().invalid() || this.secretForm().submitting()) {
       return;
+    }
+    const { key, value, description } = this.secretForm().value();
+    const trimmedKey = key.trim();
+    const trimmedValue = value;
+    if (!trimmedKey || !trimmedValue) {
+      return;
+    }
+    const normalizedDescription = description.trim();
+    this.ref.close({
+      action: 'saved',
+      secretId: this.data.secret?.id,
+      payload: {
+        key: trimmedKey,
+        value: trimmedValue,
+        description: normalizedDescription.length === 0 ? null : normalizedDescription,
+      },
     });
-    void submitted;
   }
 
   /**
