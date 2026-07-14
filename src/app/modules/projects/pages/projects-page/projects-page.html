@@ -33,9 +33,7 @@
       <mat-card-header>
         <mat-icon mat-card-avatar aria-hidden="true">folder_open</mat-icon>
         <mat-card-title>No projects yet</mat-card-title>
-        <mat-card-subtitle>
-          Projects will appear here once created.
-        </mat-card-subtitle>
+        <mat-card-subtitle> Projects will appear here once created. </mat-card-subtitle>
       </mat-card-header>
       <mat-card-actions>
         <button
@@ -55,6 +53,7 @@
   } @else {
     <header class="projects-header">
       <h1 class="projects-title">Projects</h1>
+      <span class="projects-header-spacer"></span>
       <mat-slide-toggle
         data-testid="show-archived-toggle"
         aria-label="Show archived projects"

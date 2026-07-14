@@ -24,7 +24,10 @@ import {
   type ConfirmDialogData,
   type ConfirmDialogResult,
 } from '../../components/confirm-dialog/confirm-dialog';
-import { ProjectCardMenu, type ProjectCardMenuEvent } from '../../components/project-card-menu/project-card-menu';
+import {
+  ProjectCardMenu,
+  type ProjectCardMenuEvent,
+} from '../../components/project-card-menu/project-card-menu';
 
 /**
  * Top-level projects index page. Lists the authenticated user's projects
@@ -70,6 +73,17 @@ import { ProjectCardMenu, type ProjectCardMenuEvent } from '../../components/pro
     ProjectCardMenu,
   ],
   templateUrl: './projects-page.html',
+  styles: `
+    .projects-header {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .projects-header-spacer {
+      flex: 1;
+    }
+  `,
   host: {
     '[attr.aria-busy]': 'isBusy()',
     '[attr.aria-live]': '"polite"',
@@ -154,10 +168,7 @@ export class ProjectsPage {
    * `ProjectService.create`); we then snackbar and navigate. On error we
    * snackbar the normalized message and stay put so the user can retry.
    */
-  private async handleSaved(payload: {
-    name: string;
-    description: string | null;
-  }): Promise<void> {
+  private async handleSaved(payload: { name: string; description: string | null }): Promise<void> {
     this.isSubmitting.set(true);
     try {
       const created = await this.projectsService.create({
@@ -169,7 +180,7 @@ export class ProjectsPage {
       });
       void this.router.navigate(['/modules/kanban/projects', created.id, 'boards']);
     } catch (err) {
-      const apiError = (err && typeof err === 'object' ? (err as ApiError) : null);
+      const apiError = err && typeof err === 'object' ? (err as ApiError) : null;
       this.snackBar.open(
         apiError
           ? ErrorNormalizer.toUserMessage(apiError)
@@ -264,11 +275,10 @@ export class ProjectsPage {
         'You can restore it later from the archived list. Boards under this project stay intact.',
       mode: 'archive',
     };
-    const ref = this.dialog.open<
+    const ref = this.dialog.open<ConfirmDialog, ConfirmDialogData, ConfirmDialogResult>(
       ConfirmDialog,
-      ConfirmDialogData,
-      ConfirmDialogResult
-    >(ConfirmDialog, { data });
+      { data },
+    );
     void firstValueFrom(ref.afterClosed()).then((result) => {
       if (!result?.confirmed) {
         return;
@@ -286,11 +296,9 @@ export class ProjectsPage {
     this.setSubmitting(id, true);
     try {
       await this.projectsService.archive(id);
-      const snackRef = this.snackBar.open(
-        `Project "${name}" archived`,
-        'Undo',
-        { duration: 10000 },
-      );
+      const snackRef = this.snackBar.open(`Project "${name}" archived`, 'Undo', {
+        duration: 10000,
+      });
       snackRef.onAction().subscribe(() => {
         void this.projectsService.unarchive(id);
       });
@@ -342,16 +350,14 @@ export class ProjectsPage {
     }
     const data: ConfirmDialogData = {
       title: 'Delete project?',
-      message:
-        'This permanently deletes the project and all of its boards. This cannot be undone.',
+      message: 'This permanently deletes the project and all of its boards. This cannot be undone.',
       mode: 'delete',
       projectName: project.name,
     };
-    const ref = this.dialog.open<
+    const ref = this.dialog.open<ConfirmDialog, ConfirmDialogData, ConfirmDialogResult>(
       ConfirmDialog,
-      ConfirmDialogData,
-      ConfirmDialogResult
-    >(ConfirmDialog, { data });
+      { data },
+    );
     void firstValueFrom(ref.afterClosed()).then((result) => {
       if (!result?.confirmed) {
         return;
