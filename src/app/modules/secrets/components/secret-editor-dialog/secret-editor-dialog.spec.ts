@@ -344,4 +344,36 @@ describe('SecretEditorDialog', () => {
     expect(valueInput).not.toBeNull();
     expect(document.activeElement).toBe(valueInput);
   });
+
+  it('accepts identifiers like email addresses in the key field', async () => {
+    const { fixture, closeSpy } = mountDialog({ mode: 'create', projectId: 7 });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const page = fixture.componentInstance;
+    page.setFormValue({
+      key: 'gh-cashflow-api@hostalbelen.cl',
+      value: 'super-secret',
+      description: '',
+    });
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(page.fieldErrorsForTest('key')).toHaveLength(0);
+    expect(page.formForTest.valid()).toBe(true);
+
+    await page.submitForTestForce();
+    await fixture.whenStable();
+
+    expect(closeSpy).toHaveBeenCalledWith({
+      action: 'saved',
+      secretId: undefined,
+      payload: {
+        key: 'gh-cashflow-api@hostalbelen.cl',
+        value: 'super-secret',
+        description: null,
+      },
+    });
+  });
 });

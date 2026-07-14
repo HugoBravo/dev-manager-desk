@@ -54,7 +54,7 @@ interface SecretEditorModel {
 const KEY_MAX = 100;
 const VALUE_MAX = 8192;
 const DESCRIPTION_MAX = 1000;
-const KEY_PATTERN = /^[A-Za-z0-9._-]+$/;
+const KEY_PATTERN = /^[A-Za-z0-9._@+-]+$/;
 
 interface WhitespaceOnlyError extends ValidationError.WithoutFieldTree {
   readonly kind: 'whitespaceOnly';
@@ -128,7 +128,7 @@ export class SecretEditorDialog implements OnInit {
         message: `Key must be ${KEY_MAX} characters or fewer.`,
       });
       pattern(schemaPath.key, KEY_PATTERN, {
-        message: 'Key may only contain letters, digits, dots, underscores, and hyphens.',
+        message: 'Key may only contain letters, digits, dots, underscores, hyphens, plus, and @.',
       });
       validate(schemaPath.key, (ctx) => {
         const value = ctx.value();
@@ -186,7 +186,11 @@ export class SecretEditorDialog implements OnInit {
       queueMicrotask(() => {
         this.titleRef()?.nativeElement.focus();
         queueMicrotask(() => {
-          this.valueInputRef()?.nativeElement.focus();
+          const value = this.valueInputRef()?.nativeElement;
+          if (value) {
+            value.focus();
+            value.select();
+          }
         });
       });
     });
