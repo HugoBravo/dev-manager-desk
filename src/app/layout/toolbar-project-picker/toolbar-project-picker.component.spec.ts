@@ -57,6 +57,8 @@ describe('ToolbarProjectPickerComponent', () => {
             children: [],
           },
           { path: 'modules/projects', children: [] },
+          { path: 'modules/users', children: [] },
+          { path: 'modules/users/:id', children: [] },
         ]),
         {
           provide: API_CONFIG,
@@ -392,6 +394,100 @@ describe('ToolbarProjectPickerComponent', () => {
 
     expect(navigateByUrlSpy).not.toHaveBeenCalled();
   });
+
+  // -------- USERS feature is project-agnostic (regression for the USERS routing fix) --------
+
+  it('stays on /modules/users when the active project changes while USERS is the active feature', async () => {
+    const service = TestBed.inject(ProjectService);
+    const httpMock = TestBed.inject(HttpTestingController);
+    const router = TestBed.inject(Router);
+
+    const projects = [
+      {
+        id: 1,
+        name: 'Alpha',
+        slug: 'alpha',
+        owner_id: 1,
+        archived_at: null,
+        created_at: '',
+        updated_at: '',
+      },
+      {
+        id: 8,
+        name: 'Beta',
+        slug: 'beta',
+        owner_id: 1,
+        archived_at: null,
+        created_at: '',
+        updated_at: '',
+      },
+    ];
+
+    const p = service.bootstrap();
+    httpMock.expectOne(projectsUrl).flush(paginated(projects));
+    await p;
+
+    await router.navigateByUrl('/modules/users');
+    const navigateByUrlSpy = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
+
+    const fixture = TestBed.createComponent(ToolbarProjectPickerComponent);
+    fixture.detectChanges();
+    TestBed.tick();
+
+    // The effect should NOT have bounced the user out of /modules/users.
+    // Before the fix, classifyFeature('/modules/users') returned 'unknown',
+    // targetFor fell back to /modules/projects, and the user was redirected
+    // out of the USERS module when the active project landed on a real id.
+    expect(navigateByUrlSpy).not.toHaveBeenCalled();
+
+    service.setActive(service.projects().find((proj) => proj.id === 8) ?? null);
+    TestBed.tick();
+
+    // Switching projects while on /modules/users must stay on /modules/users.
+    expect(navigateByUrlSpy).not.toHaveBeenCalledWith(
+      expect.stringMatching(/^\/modules\/projects(\/|$)/),
+    );
+    expect(navigateByUrlSpy).not.toHaveBeenCalledWith(
+      expect.stringMatching(/^\/modules\/kanban(\/|$)/),
+    );
+    expect(navigateByUrlSpy).not.toHaveBeenCalledWith(
+      expect.stringMatching(/^\/modules\/secrets(\/|$)/),
+    );
+  });
+
+  it('stays on /modules/users/3 (admin editing another user) when the active project changes', async () => {
+    const service = TestBed.inject(ProjectService);
+    const httpMock = TestBed.inject(HttpTestingController);
+    const router = TestBed.inject(Router);
+
+    const projects = [
+      {
+        id: 1,
+        name: 'Alpha',
+        slug: 'alpha',
+        owner_id: 1,
+        archived_at: null,
+        created_at: '',
+        updated_at: '',
+      },
+    ];
+
+    const p = service.bootstrap();
+    httpMock.expectOne(projectsUrl).flush(paginated(projects));
+    await p;
+
+    await router.navigateByUrl('/modules/users/3');
+    const navigateByUrlSpy = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
+
+    const fixture = TestBed.createComponent(ToolbarProjectPickerComponent);
+    fixture.detectChanges();
+    TestBed.tick();
+
+    service.setActive(service.projects()[0]!);
+    TestBed.tick();
+
+    expect(navigateByUrlSpy).not.toHaveBeenCalled();
+  });
 });
 
 describe('classifyFeature / targetFor (picker routing policy)', () => {
@@ -412,6 +508,12 @@ describe('classifyFeature / targetFor (picker routing policy)', () => {
     expect(classifyFeature('/modules/kanban/projects/1/boards')).toBe('kanban');
   });
 
+  it('classifies /modules/users and its sub-paths as "users" (project-agnostic feature, regression for the USERS sidebar link)', () => {
+    expect(classifyFeature('/modules/users')).toBe('users');
+    expect(classifyFeature('/modules/users/')).toBe('users');
+    expect(classifyFeature('/modules/users/5')).toBe('users');
+  });
+
   it('classifies unrelated URLs as "unknown"', () => {
     expect(classifyFeature('/dashboard')).toBe('unknown');
     expect(classifyFeature('/')).toBe('unknown');
@@ -430,6 +532,15 @@ describe('classifyFeature / targetFor (picker routing policy)', () => {
       feature: 'kanban',
       url: '/modules/kanban/projects/7/boards',
     });
+    // 'users' has no per-project sub-route — same URL regardless of projectId.
+    expect(targetFor('users', 7)).toEqual({
+      feature: 'users',
+      url: '/modules/users',
+    });
+    expect(targetFor('users', 8)).toEqual({
+      feature: 'users',
+      url: '/modules/users',
+    });
   });
 
   it('targetFor falls back to projects for unknown features (NOT kanban)', () => {
@@ -437,5 +548,14 @@ describe('classifyFeature / targetFor (picker routing policy)', () => {
       feature: 'projects',
       url: '/modules/projects',
     });
+  });
+
+  it('targetFor does NOT return /modules/kanban (the bare path the picker then expands to a per-project kanban boards URL)', () => {
+    // Regression: clicking USERS as an admin used to bounce the user out
+    // because `/modules/users` classified as `unknown`, whose fallback was
+    // `/modules/projects`. With `users` recognised as its own feature, the
+    // URL stays put and the picker must never pick `/modules/kanban` for it.
+    expect(targetFor('users', 8).url).not.toBe('/modules/kanban');
+    expect(targetFor('users', 8).url).not.toMatch(/^\/modules\/kanban(\/|$)/);
   });
 });

@@ -1,8 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import {
-  HttpTestingController,
-  provideHttpClientTesting,
-} from '@angular/common/http/testing';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { provideRouter } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
@@ -104,7 +101,10 @@ describe('AuthService', () => {
         password: 'secret123',
         device_name: 'dev-manager-desk:browser',
       });
-      req.flush(mockResponse);
+      req.flush({
+        user: { data: mockResponse.user },
+        token: mockResponse.token,
+      });
 
       const result = await resultPromise;
       expect(result.ok).toBe(true);
@@ -114,9 +114,8 @@ describe('AuthService', () => {
       expect(service.user()).toEqual(fakeUser);
       expect(service.token()).toBe('fresh-token');
       expect(service.isAuthenticated()).toBe(true);
-      expect(window.localStorage.getItem(TOKEN_STORAGE_KEY)).toBe(
-        'fresh-token',
-      );
+      expect(window.localStorage.getItem(USER_STORAGE_KEY)).toBe(JSON.stringify(fakeUser));
+      expect(window.localStorage.getItem(TOKEN_STORAGE_KEY)).toBe('fresh-token');
     });
 
     it('surfaces the 422 field-error map without mutating signals', async () => {
@@ -145,15 +144,10 @@ describe('AuthService', () => {
     });
 
     it('returns a generic invalid-credentials message on 401', async () => {
-      const resultPromise = firstValueFrom(
-        service.login({ email: 'x@x.com', password: 'nope' }),
-      );
+      const resultPromise = firstValueFrom(service.login({ email: 'x@x.com', password: 'nope' }));
 
       const req = httpMock.expectOne(`${API_BASE_URL}/auth/login`);
-      req.flush(
-        { message: 'Unauthorized' },
-        { status: 401, statusText: 'Unauthorized' },
-      );
+      req.flush({ message: 'Unauthorized' }, { status: 401, statusText: 'Unauthorized' });
 
       const result = await resultPromise;
       expect(result.ok).toBe(false);
@@ -163,9 +157,7 @@ describe('AuthService', () => {
     });
 
     it('returns a connectivity message on network failure (status 0)', async () => {
-      const resultPromise = firstValueFrom(
-        service.login({ email: 'x@x.com', password: 'nope' }),
-      );
+      const resultPromise = firstValueFrom(service.login({ email: 'x@x.com', password: 'nope' }));
 
       const req = httpMock.expectOne(`${API_BASE_URL}/auth/login`);
       req.error(new ProgressEvent('error'));
@@ -208,6 +200,7 @@ describe('AuthService', () => {
       expect(user).toEqual(fakeUser);
       expect(svc.user()).toEqual(fakeUser);
       expect(svc.isAuthenticated()).toBe(true);
+      expect(window.localStorage.getItem(USER_STORAGE_KEY)).toBe(JSON.stringify(fakeUser));
     });
 
     it('returns null (instead of throwing) on 401', async () => {
@@ -228,10 +221,7 @@ describe('AuthService', () => {
 
       const resultPromise = firstValueFrom(svc.me());
       const req = localHttpMock.expectOne(`${API_BASE_URL}/user`);
-      req.flush(
-        { message: 'Unauthenticated.' },
-        { status: 401, statusText: 'Unauthorized' },
-      );
+      req.flush({ message: 'Unauthenticated.' }, { status: 401, statusText: 'Unauthorized' });
 
       const user = await resultPromise;
       expect(user).toBeNull();
@@ -292,10 +282,7 @@ describe('AuthService', () => {
       const logoutPromise = firstValueFrom(svc.logout());
 
       const req = localHttpMock.expectOne(`${API_BASE_URL}/auth/logout`);
-      req.flush(
-        { message: 'Server down' },
-        { status: 500, statusText: 'Internal Server Error' },
-      );
+      req.flush({ message: 'Server down' }, { status: 500, statusText: 'Internal Server Error' });
 
       const result = await logoutPromise;
       expect(result).toBeUndefined();
@@ -368,6 +355,7 @@ describe('AuthService', () => {
       await bootstrapPromise;
       expect(svc.user()).toEqual(fakeUser);
       expect(svc.isBootstrapped()).toBe(true);
+      expect(window.localStorage.getItem(USER_STORAGE_KEY)).toBe(JSON.stringify(fakeUser));
     });
 
     it('still resolves bootstrap on /user 401 (so guard can redirect)', async () => {
@@ -388,10 +376,7 @@ describe('AuthService', () => {
       const bootstrapPromise = firstValueFrom(svc.bootstrap());
 
       const req = localHttpMock.expectOne(`${API_BASE_URL}/user`);
-      req.flush(
-        { message: 'Unauthenticated.' },
-        { status: 401, statusText: 'Unauthorized' },
-      );
+      req.flush({ message: 'Unauthenticated.' }, { status: 401, statusText: 'Unauthorized' });
 
       await bootstrapPromise;
       expect(svc.isBootstrapped()).toBe(true);

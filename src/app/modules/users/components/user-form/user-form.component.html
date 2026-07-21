@@ -1,11 +1,17 @@
-<form class="user-form" novalidate (submit)="onSubmit($event)" aria-labelledby="user-form-title">
+<form
+  class="user-form"
+  [formGroup]="formGroup"
+  (ngSubmit)="onSubmit($event)"
+  novalidate
+  aria-labelledby="user-form-title"
+>
   <h2 id="user-form-title" class="user-form-title">User</h2>
 
   @if (errors()._form; as formError) {
     <p
       class="user-form-form-error"
       role="alert"
-      [id]="formErrorId()"
+      [id]="formErrorId"
       data-testid="user-form-form-error"
     >
       {{ formError }}
@@ -18,17 +24,18 @@
       matInput
       type="text"
       [id]="nameId"
-      name="name"
+      formControlName="name"
       autocomplete="name"
       required
-      [attr.aria-invalid]="!!errors().name"
-      [attr.aria-describedby]="errors().name ? nameErrorId() : null"
-      [value]="_name()"
-      (input)="onNameInput($any($event.target).value)"
+      [errorStateMatcher]="_nameErrorMatcher"
+      [attr.aria-invalid]="!!(formGroup.controls.name.invalid || errors().name)"
+      [attr.aria-describedby]="(formGroup.controls.name.invalid || errors().name) ? nameErrorId : null"
       data-testid="user-form-name"
     />
-    @if (errors().name; as nameError) {
-      <mat-error [id]="nameErrorId()">{{ nameError }}</mat-error>
+    @if (formGroup.controls.name.hasError('required')) {
+      <mat-error [id]="nameErrorId">The name field is required.</mat-error>
+    } @else if (errors().name; as serverNameError) {
+      <mat-error [id]="nameErrorId">{{ serverNameError }}</mat-error>
     }
   </mat-form-field>
 
@@ -38,21 +45,23 @@
       matInput
       type="email"
       [id]="emailId"
-      name="email"
+      formControlName="email"
       autocomplete="email"
       [readonly]="!canEditEmail()"
-      [required]="canEditEmail()"
-      [attr.aria-invalid]="!!errors().email"
-      [attr.aria-describedby]="errors().email ? emailErrorId() : null"
-      [value]="_email()"
-      (input)="onEmailInput($any($event.target).value)"
+      [errorStateMatcher]="_emailErrorMatcher"
+      [attr.aria-invalid]="!!(formGroup.controls.email.invalid || errors().email)"
+      [attr.aria-describedby]="(formGroup.controls.email.invalid || errors().email) ? emailErrorId : null"
       data-testid="user-form-email"
     />
     @if (!canEditEmail()) {
       <mat-hint>Email changes are reserved for administrators.</mat-hint>
     }
-    @if (errors().email; as emailError) {
-      <mat-error [id]="emailErrorId()">{{ emailError }}</mat-error>
+    @if (formGroup.controls.email.hasError('required')) {
+      <mat-error [id]="emailErrorId">The email field is required.</mat-error>
+    } @else if (formGroup.controls.email.hasError('email')) {
+      <mat-error [id]="emailErrorId">The email field must be a valid email address.</mat-error>
+    } @else if (errors().email; as serverEmailError) {
+      <mat-error [id]="emailErrorId">{{ serverEmailError }}</mat-error>
     }
   </mat-form-field>
 
@@ -62,12 +71,11 @@
       matInput
       type="password"
       [id]="passwordId"
-      name="password"
+      formControlName="password"
       autocomplete="new-password"
-      [attr.aria-invalid]="!!errors().password"
-      [attr.aria-describedby]="errors().password ? passwordErrorId() : null"
-      [value]="_password()"
-      (input)="onPasswordInput($any($event.target).value)"
+      [errorStateMatcher]="_passwordErrorMatcher"
+      [attr.aria-invalid]="!!(formGroup.controls.password.invalid || errors().password)"
+      [attr.aria-describedby]="(formGroup.controls.password.invalid || errors().password) ? passwordErrorId : null"
       data-testid="user-form-password"
     />
     @if (requirePassword()) {
@@ -75,24 +83,26 @@
     } @else {
       <mat-hint>Leave blank to keep the current password.</mat-hint>
     }
-    @if (errors().password; as passwordError) {
-      <mat-error [id]="passwordErrorId()">{{ passwordError }}</mat-error>
+    @if (formGroup.controls.password.hasError('required')) {
+      <mat-error [id]="passwordErrorId">The password field is required.</mat-error>
+    } @else if (formGroup.controls.password.hasError('minlength')) {
+      <mat-error [id]="passwordErrorId">The password field must be at least 8 characters.</mat-error>
+    } @else if (errors().password; as serverPasswordError) {
+      <mat-error [id]="passwordErrorId">{{ serverPasswordError }}</mat-error>
     }
   </mat-form-field>
 
   @if (canEditIsAdmin()) {
     <mat-checkbox
       [id]="isAdminId"
-      name="is_admin"
-      [checked]="_isAdmin()"
-      (change)="onIsAdminChange($event)"
-      [attr.aria-describedby]="errors().is_admin ? isAdminErrorId() : null"
+      formControlName="is_admin"
+      [attr.aria-describedby]="errors().is_admin ? isAdminErrorId : null"
       data-testid="user-form-is-admin"
     >
       Administrator
     </mat-checkbox>
-    @if (errors().is_admin; as isAdminError) {
-      <mat-error [id]="isAdminErrorId()">{{ isAdminError }}</mat-error>
+    @if (errors().is_admin; as isAdminErrorMessage) {
+      <mat-error [id]="isAdminErrorId">{{ isAdminErrorMessage }}</mat-error>
     }
   }
 

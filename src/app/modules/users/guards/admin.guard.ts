@@ -4,8 +4,8 @@ import {
   type ActivatedRouteSnapshot,
   type CanActivateFn,
   type RouterStateSnapshot,
-  type UrlTree,
 } from '@angular/router';
+import { catchError, map, of } from 'rxjs';
 
 import { AuthService } from '../../../core/auth/auth.service';
 
@@ -13,12 +13,19 @@ import { AuthService } from '../../../core/auth/auth.service';
  * Functional route guard for the user-administration feature.
  *
  * Contract:
- * - `AuthService.user()` is null → redirect to /auth/login with returnUrl.
- * - `user().is_admin === true` → allow.
- * - Non-admin editing SELF (`:id` matches their own id and they are not
- *   admin) → allow (self-service profile).
- * - Non-admin editing ANOTHER user (`:id` differs from their own id) →
- *   redirect to /modules/kanban.
+ * - No bearer token → redirect to /auth/login with returnUrl.
+ * - An authenticated session refreshes `AuthService.me()` before deciding.
+ * - Refreshed `user.is_admin === true` → allow.
+ * - Refreshed non-admin editing SELF → allow.
+ * - Refreshed non-admin on the list or another user → /modules/projects.
+ * - Refresh failure or null response → /modules/projects.
+ *
+ * Why `/modules/projects` and not `/modules/kanban`? Bare
+ * `/modules/kanban` is NOT a stable landing — `ToolbarProjectPickerComponent`
+ * expands it to `/modules/kanban/projects/:id/boards` the moment a project
+ * becomes active. That would put denied users on what looks like the
+ * main shell entry but is actually a single project board, hiding the
+ * denial. Projects is the stable, project-agnostic landing.
  *
  * Defence in depth: the backend's UserPolicy still rejects any cross-user
  * action with 403 even if a stale SPA shell tries to bypass this guard.
@@ -26,29 +33,33 @@ import { AuthService } from '../../../core/auth/auth.service';
 export const adminUserGuard: CanActivateFn = (
   route: ActivatedRouteSnapshot,
   state: RouterStateSnapshot,
-): boolean | UrlTree => {
+) => {
   const auth = inject(AuthService);
   const router = inject(Router);
 
-  const user = auth.user();
-
-  if (user === null) {
+  if (auth.token() === null) {
     return router.createUrlTree(['/auth/login'], {
       queryParams: { returnUrl: state.url },
     });
   }
 
-  if (user.is_admin === true) {
-    return true;
-  }
-
-  // Self-service profile edit is always allowed for the authenticated user.
   const targetId = readUserIdParam(route);
-  if (targetId !== null && String(targetId) === String(user.id)) {
-    return true;
-  }
+  const denied = router.createUrlTree(['/modules/projects']);
 
-  return router.createUrlTree(['/modules/kanban']);
+  return auth.me().pipe(
+    map((user) => {
+      if (user?.is_admin === true) {
+        return true;
+      }
+
+      if (user !== null && targetId !== null && String(targetId) === String(user.id)) {
+        return true;
+      }
+
+      return denied;
+    }),
+    catchError(() => of(denied)),
+  );
 };
 
 function readUserIdParam(route: ActivatedRouteSnapshot): number | null {

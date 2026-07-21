@@ -11,19 +11,22 @@ import { ProjectService } from '../../core/projects/project.service';
 /**
  * Identifies the active feature behind the current URL — drives the
  * picker's per-project target route so we never yank the user out of
- * the feature they were on. Three features share the shell:
+ * the feature they were on. The features that share the shell:
  *
  * - `projects` lives at `/modules/projects` (no `:projectId` segment —
  *   it's the project list/index).
  * - `kanban` lives under `/modules/kanban/projects/:projectId/boards...`
  * - `secrets` lives under `/modules/secrets/projects/:projectId...`
+ * - `users` lives at `/modules/users/:id?...` (project-agnostic — the
+ *   picker keeps the URL on `/modules/users` regardless of the active
+ *   project; only `users` route param changes).
  *
  * Anything else (the bare `/modules/kanban` landing, unknown routes)
  * falls through as `unknown` and the picker defaults to the highest
  * shell feature (`projects`) rather than assuming `kanban`, which was
  * the prior behavior and broke the Projects link.
  */
-export type PickerFeature = 'projects' | 'kanban' | 'secrets' | 'unknown';
+export type PickerFeature = 'projects' | 'kanban' | 'secrets' | 'users' | 'unknown';
 
 /**
  * Feature-scoped per-project route. Each branch corresponds to the
@@ -145,14 +148,18 @@ export function classifyFeature(url: string): PickerFeature {
   if (normalized === '/modules/kanban' || normalized.startsWith('/modules/kanban/')) {
     return 'kanban';
   }
+  if (normalized === '/modules/users' || normalized.startsWith('/modules/users/')) {
+    return 'users';
+  }
   return 'unknown';
 }
 
 /**
- * Resolve the per-project landing for the given feature. Projects itself
- * has no `:projectId` route — the active project lives on `ProjectService`
- * and is reflected in the picker/UI. Returning the bare `/modules/projects`
- * URL keeps the user where they were when they switched projects.
+ * Resolve the per-project landing for the given feature. Projects and
+ * users themselves have no `:projectId` route — the active project lives
+ * on `ProjectService` and is reflected in the picker/UI. Returning the
+ * bare feature URL keeps the user where they were when they switched
+ * projects.
  */
 export function targetFor(feature: PickerFeature, projectId: number): PickerTarget {
   switch (feature) {
@@ -162,6 +169,11 @@ export function targetFor(feature: PickerFeature, projectId: number): PickerTarg
       return { feature, url: `/modules/secrets/projects/${projectId}` };
     case 'kanban':
       return { feature, url: `/modules/kanban/projects/${projectId}/boards` };
+    case 'users':
+      // USERS is project-agnostic — never carry a `:projectId` segment,
+      // otherwise admin users would be silently bounced out of the
+      // module on project switch (regression: USERS sidebar link).
+      return { feature, url: '/modules/users' };
     case 'unknown':
     default:
       // No active feature in the URL — default to Projects (the shell's

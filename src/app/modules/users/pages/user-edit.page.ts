@@ -145,7 +145,7 @@ export class UserEditPage {
           return;
         }
         this.snackBar.open(`Created user ${created.email}`, 'Dismiss', { duration: 3000 });
-        void this.router.navigate(['/modules/users', String(created.id)]);
+        void this.router.navigate(['/modules/users']);
         return;
       }
       if (id === null) {
@@ -161,6 +161,7 @@ export class UserEditPage {
       }
       this._user.set(updated);
       this.snackBar.open('Saved', 'Dismiss', { duration: 2000 });
+      void this.router.navigate(['/modules/users']);
     } finally {
       this._submitting.set(false);
     }

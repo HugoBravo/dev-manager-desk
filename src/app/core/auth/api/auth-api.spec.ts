@@ -1,14 +1,11 @@
 import { TestBed } from '@angular/core/testing';
-import {
-  HttpTestingController,
-  provideHttpClientTesting,
-} from '@angular/common/http/testing';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 
 import { API_CONFIG } from '../../config/api-config';
 import { AuthApi } from './auth-api';
-import type { AuthResponse, User, UserResponse } from '../auth.types';
+import type { AuthResponse, AuthWireResponse, UserResponse } from '../auth.types';
 
 const API_BASE_URL = 'http://localhost:8000/api';
 
@@ -33,42 +30,55 @@ describe('AuthApi', () => {
   });
 
   describe('login', () => {
-    it('POSTs credentials to /auth/login with the expected payload', async () => {
-      const mockResponse: AuthResponse = {
-        token: 'plain-token-abc',
-        user: {
-          id: 7,
+    it.each([true, false])(
+      'POSTs credentials and unwraps user.data with is_admin=%s as a strict boolean',
+      async (isAdmin) => {
+        const mockResponse: AuthWireResponse = {
+          token: 'plain-token-abc',
+          user: {
+            data: {
+              id: 7,
+              email: 'hugo@example.com',
+              name: 'Hugo',
+              email_verified_at: '2026-01-01T00:00:00Z',
+              is_admin: isAdmin,
+            },
+          },
+        };
+        const expectedResponse: AuthResponse = {
+          token: mockResponse.token,
+          user: mockResponse.user.data,
+        };
+
+        const responsePromise = firstValueFrom(
+          api.login({ email: 'hugo@example.com', password: 'secret123' }),
+        );
+
+        const req = httpMock.expectOne(`${API_BASE_URL}/auth/login`);
+        expect(req.request.method).toBe('POST');
+        expect(req.request.body).toEqual({
           email: 'hugo@example.com',
-          name: 'Hugo',
-          email_verified_at: '2026-01-01T00:00:00Z',
-        },
-      };
+          password: 'secret123',
+          device_name: 'dev-manager-desk:browser',
+        });
+        req.flush(mockResponse);
 
-      const responsePromise = firstValueFrom(
-        api.login({ email: 'hugo@example.com', password: 'secret123' }),
-      );
-
-      const req = httpMock.expectOne(`${API_BASE_URL}/auth/login`);
-      expect(req.request.method).toBe('POST');
-      expect(req.request.body).toEqual({
-        email: 'hugo@example.com',
-        password: 'secret123',
-        device_name: 'dev-manager-desk:browser',
-      });
-      req.flush(mockResponse);
-
-      const response = await responsePromise;
-      expect(response).toEqual(mockResponse);
-    });
+        const response = await responsePromise;
+        expect(response).toEqual(expectedResponse);
+        expect(response.user.is_admin).toBe(isAdmin);
+        expect(typeof response.user.is_admin).toBe('boolean');
+      },
+    );
   });
 
   describe('me', () => {
     it('GETs /user and unwraps the .data envelope', async () => {
-      const user: User = {
+      const user: UserResponse['data'] = {
         id: 7,
         email: 'hugo@example.com',
         name: 'Hugo',
         email_verified_at: null,
+        is_admin: false,
       };
       const mockResponse: UserResponse = { data: user };
 

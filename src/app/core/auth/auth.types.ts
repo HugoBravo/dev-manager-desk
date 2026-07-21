@@ -12,6 +12,10 @@ export interface User {
   readonly is_admin?: boolean;
 }
 
+export interface UserResourceData extends User {
+  readonly is_admin: boolean;
+}
+
 export interface AuthTokens {
   readonly token: string;
 }
@@ -22,15 +26,18 @@ export interface LoginRequest {
   readonly device_name: string;
 }
 
-/** Wire shape returned by POST /api/auth/login (flat — NOT wrapped in `data`). */
 export interface AuthResponse {
   readonly user: User;
   readonly token: string;
 }
 
-/** Wire shape returned by GET /api/user (wrapped in `data`). */
+export interface AuthWireResponse {
+  readonly user: UserResponse;
+  readonly token: string;
+}
+
 export interface UserResponse {
-  readonly data: User;
+  readonly data: UserResourceData;
 }
 
 export type LoginResult =

@@ -54,10 +54,12 @@ describe('UserFormComponent', () => {
     let received: UserFormValue | null = null;
     create({ name: '', email: '', password: '', is_admin: false }, {}, true, false);
     component.submitted.subscribe((value) => (received = value));
-    component.onNameInput('  Renamed  ');
-    component.onEmailInput(' renamed@example.com ');
-    component.onPasswordInput('pw1234567');
-    component.onIsAdminChange({ checked: true } as never);
+    component.formGroup.setValue({
+      name: '  Renamed  ',
+      email: ' renamed@example.com ',
+      password: 'pw1234567',
+      is_admin: true,
+    });
     component.onSubmit(new Event('submit'));
     expect(received).toEqual({
       name: 'Renamed',

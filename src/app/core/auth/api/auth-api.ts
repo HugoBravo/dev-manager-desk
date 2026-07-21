@@ -4,11 +4,7 @@ import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 
 import { API_CONFIG } from '../../config/api-config';
-import type {
-  AuthResponse,
-  LoginRequest,
-  UserResponse,
-} from '../auth.types';
+import type { AuthResponse, AuthWireResponse, LoginRequest, UserResponse } from '../auth.types';
 
 const DEVICE_NAME = 'dev-manager-desk:browser';
 
@@ -33,10 +29,14 @@ export class AuthApi {
       password: credentials.password,
       device_name: DEVICE_NAME,
     };
-    return this.http.post<AuthResponse>(
-      `${this.apiConfig.apiBaseUrl}/auth/login`,
-      payload,
-    );
+    return this.http
+      .post<AuthWireResponse>(`${this.apiConfig.apiBaseUrl}/auth/login`, payload)
+      .pipe(
+        map((response) => ({
+          user: response.user.data,
+          token: response.token,
+        })),
+      );
   }
 
   me(): Observable<UserResponse['data']> {
