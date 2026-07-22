@@ -86,6 +86,24 @@ describe('ErrorNormalizer', () => {
       expect(r.code).toBeUndefined();
     });
 
+    // RED GUARD (kanban-per-task S0): the comment edit-window discriminator
+    // must recognize the new task-scoped chain. The path-segment matcher
+    // inspects only the last two segments, so this should already pass with
+    // the current implementation — but the test is locked in BEFORE any
+    // URL-shape refactor so a regression in S1+ cannot silently drop
+    // task-scoped comments out of the edit_window_expired branch.
+    it('task-scoped /tasks/{id}/kanban/.../comments/{id} -> edit_window_expired', () => {
+      const taskScopedCommentUrl =
+        'http://localhost:8000/api/v1/projects/1/tasks/1/kanban/boards/1/comments/9';
+      const r = ErrorNormalizer.normalize(
+        403,
+        { message: 'Forbidden' },
+        { url: taskScopedCommentUrl },
+      );
+      if (r.kind !== 'forbidden') throw new Error('expected forbidden');
+      expect(r.code).toBe('edit_window_expired');
+    });
+
     it('prefers X-Kanban-Realm: comment header over URL heuristic', () => {
       const r = ErrorNormalizer.normalize(
         403,
