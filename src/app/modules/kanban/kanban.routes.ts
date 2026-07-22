@@ -1,6 +1,7 @@
 import type { Routes } from '@angular/router';
 
 import { projectRequiredGuard } from './guards/project-required.guard';
+import { taskRequiredGuard } from './guards/task-required.guard';
 
 /**
  * Kanban routes. The URL chain reflects the kanban-per-task backend:
@@ -33,17 +34,17 @@ export const KANBAN_ROUTES: Routes = [
   },
   {
     path: 'projects/:projectId/tasks/:taskId/boards',
-    canActivate: [projectRequiredGuard],
+    canActivate: [projectRequiredGuard, taskRequiredGuard],
     loadComponent: () => import('./pages/boards-list.page').then((m) => m.BoardsListPage),
   },
   {
     path: 'projects/:projectId/tasks/:taskId/boards/trash',
-    canActivate: [projectRequiredGuard],
+    canActivate: [projectRequiredGuard, taskRequiredGuard],
     loadComponent: () => import('./pages/board-trash.page').then((m) => m.BoardTrashPage),
   },
   {
     path: 'projects/:projectId/tasks/:taskId/boards/:boardId',
-    canActivate: [projectRequiredGuard],
+    canActivate: [projectRequiredGuard, taskRequiredGuard],
     loadComponent: () => import('./pages/board-detail.page').then((m) => m.BoardDetailPage),
   },
 ];

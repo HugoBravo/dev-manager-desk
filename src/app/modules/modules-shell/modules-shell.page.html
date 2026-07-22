@@ -93,6 +93,18 @@
       </a>
       <a
         mat-list-item
+        routerLink="tasks"
+        routerLinkActive="active-link"
+        ariaCurrentWhenActive="page"
+        aria-label="Tasks"
+      >
+        <mat-icon matListItemIcon>checklist</mat-icon>
+        @if (!sidebarCollapsed()) {
+          <span matListItemTitle>TASKS</span>
+        }
+      </a>
+      <a
+        mat-list-item
         routerLink="kanban"
         routerLinkActive="active-link"
         ariaCurrentWhenActive="page"
