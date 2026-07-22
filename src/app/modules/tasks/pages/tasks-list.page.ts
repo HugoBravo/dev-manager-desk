@@ -31,28 +31,81 @@ export function filterTasks(tasks: readonly Task[], status: TaskFilter): readonl
   template: `
     <section class="tasks-page" aria-labelledby="tasks-title">
       <header class="tasks-header">
-        <div><h1 id="tasks-title">Tasks</h1><p>Select a task to open its Kanban board.</p></div>
-        <button mat-flat-button type="button" (click)="openEditor()">Create task</button>
+        <div class="tasks-header__text">
+          <h1 id="tasks-title">Tasks</h1>
+          <p>Select a task to open its Kanban board.</p>
+        </div>
+        <button mat-flat-button type="button" color="primary" class="tasks-header__cta" (click)="openEditor()">Create task</button>
       </header>
-      <mat-form-field appearance="outline"><mat-label>Status</mat-label>
-        <mat-select [value]="status()" (selectionChange)="status.set($event.value)">
-          <mat-option value="all">All</mat-option><mat-option value="open">Open</mat-option>
-          <mat-option value="in_progress">In progress</mat-option><mat-option value="done">Done</mat-option>
-        </mat-select>
-      </mat-form-field>
-      @if (loading()) { <div role="status">Loading tasks…</div> }
-      @else if (error()) { <p role="alert">Could not load tasks. <button mat-button type="button" (click)="reload()">Retry</button></p> }
-      @else if (visibleTasks().length === 0) { <mat-card><mat-card-content>No tasks found. Create a task to start.</mat-card-content></mat-card> }
-      @else { <div class="task-list" role="list">
-        @for (task of visibleTasks(); track task.id) {
-          <mat-card role="listitem"><mat-card-header><mat-card-title>{{ task.name }}</mat-card-title></mat-card-header>
-            <mat-card-content><p>{{ task.description || 'No description' }}</p><span>{{ task.status }}</span></mat-card-content>
-            <mat-card-actions><button mat-button type="button" (click)="select(task)">Open Kanban</button><button mat-button type="button" (click)="openEditor(task)">Edit</button></mat-card-actions>
-          </mat-card>
-        }
-      </div> }
+
+      <div class="tasks-toolbar">
+        <mat-form-field appearance="outline" class="tasks-toolbar__filter">
+          <mat-label>Status</mat-label>
+          <mat-select [value]="status()" (selectionChange)="status.set($event.value)">
+            <mat-option value="all">All</mat-option>
+            <mat-option value="open">Open</mat-option>
+            <mat-option value="in_progress">In progress</mat-option>
+            <mat-option value="done">Done</mat-option>
+          </mat-select>
+        </mat-form-field>
+      </div>
+
+      @if (loading()) {
+        <div role="status" class="tasks-state">Loading tasks…</div>
+      } @else if (error()) {
+        <p role="alert" class="tasks-state">
+          Could not load tasks.
+          <button mat-button type="button" (click)="reload()">Retry</button>
+        </p>
+      } @else if (visibleTasks().length === 0) {
+        <mat-card class="tasks-empty">
+          <mat-card-content>No tasks found. Create a task to start.</mat-card-content>
+        </mat-card>
+      } @else {
+        <ul class="task-list" role="list">
+          @for (task of visibleTasks(); track task.id) {
+            <li class="task-item" role="listitem">
+              <mat-card class="task-card">
+                <mat-card-header>
+                  <mat-card-title class="task-card__title">{{ task.name }}</mat-card-title>
+                  <mat-card-subtitle class="task-card__status">{{ task.status }}</mat-card-subtitle>
+                </mat-card-header>
+                <mat-card-content class="task-card__body">
+                  <p>{{ task.description || 'No description' }}</p>
+                </mat-card-content>
+                <mat-card-actions class="task-card__actions">
+                  <button mat-flat-button type="button" color="primary" (click)="select(task)">Open Kanban</button>
+                  <button mat-button type="button" (click)="openEditor(task)">Edit</button>
+                </mat-card-actions>
+              </mat-card>
+            </li>
+          }
+        </ul>
+      }
     </section>
   `,
+  styles: [
+    `
+      :host { display: block; }
+      .tasks-page { display: flex; flex-direction: column; gap: 1.5rem; max-width: 1100px; margin: 0 auto; padding: 1.5rem; }
+      .tasks-header { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+      .tasks-header__text h1 { margin: 0 0 0.25rem; font-size: 1.75rem; }
+      .tasks-header__text p { margin: 0; color: rgba(255, 255, 255, 0.7); }
+      .tasks-header__cta { flex-shrink: 0; align-self: flex-start; }
+      .tasks-toolbar { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; }
+      .tasks-toolbar__filter { width: 220px; }
+      .tasks-state { padding: 1.5rem; border-radius: 8px; background: rgba(255, 255, 255, 0.05); }
+      .tasks-empty { padding: 1rem 1.5rem; }
+      .task-list { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; }
+      .task-item { display: block; }
+      .task-card { height: 100%; display: flex; flex-direction: column; }
+      .task-card__title { font-weight: 600; }
+      .task-card__status { text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.05em; }
+      .task-card__body { flex: 1 1 auto; }
+      .task-card__body p { margin: 0; color: rgba(255, 255, 255, 0.75); }
+      .task-card__actions { display: flex; flex-wrap: wrap; gap: 0.5rem; padding: 0.5rem 1rem 1rem; }
+    `,
+  ],
   host: { '[attr.aria-busy]': 'loading()' },
 })
 export class TasksListPage {

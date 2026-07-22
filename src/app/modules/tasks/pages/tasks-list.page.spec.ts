@@ -7,13 +7,32 @@ import { MatDialog } from '@angular/material/dialog';
 import { filterTasks, TasksListPage } from './tasks-list.page';
 import { TasksService } from '../../../core/tasks/tasks.service';
 import { ProjectService } from '../../../core/projects/project.service';
+import { API_CONFIG } from '../../../core/config/api-config';
 import type { Task } from '../../../core/tasks/task.model';
+import type { Project } from '../../../core/projects/project.model';
 import { buildBoardRoute } from '../../kanban/utils/build-board-route';
 
 const tasks: Task[] = [
   { id: 1, project_id: 7, name: 'Open', slug: 'open', description: null, status: 'open', archived_at: null, created_at: '', updated_at: '' },
   { id: 2, project_id: 7, name: 'Done', slug: 'done', description: null, status: 'done', archived_at: null, created_at: '', updated_at: '' },
 ];
+
+const project = (id: number): Project => ({
+  id,
+  name: 'Demo',
+  slug: 'demo',
+  description: null,
+  owner_id: 1,
+  archived_at: null,
+  created_at: '2026-01-01T00:00:00Z',
+  updated_at: '2026-01-01T00:00:00Z',
+});
+
+const paginatedTasks = (data: Task[]) => ({
+  data: data.map((task) => ({ data: task })),
+  links: { first: '', last: '', prev: null, next: null },
+  meta: { current_page: 1, from: 1, last_page: 1, per_page: 25, to: data.length, total: data.length, path: '' },
+});
 
 class FakeMatDialog {
   open = vi.fn().mockReturnValue({ afterClosed: () => ({ toPromise: () => Promise.resolve(undefined) }) });
@@ -29,54 +48,70 @@ describe('filterTasks', () => {
   });
 });
 
+async function configure(projectId = '7'): Promise<{
+  component: TasksListPage;
+  service: TasksService;
+  projects: ProjectService;
+  router: Router;
+  httpMock: HttpTestingController;
+}> {
+  window.localStorage.clear();
+  TestBed.resetTestingModule();
+  await TestBed.configureTestingModule({
+    imports: [TasksListPage],
+    providers: [
+      provideRouter([]),
+      provideHttpClient(),
+      provideHttpClientTesting(),
+      { provide: API_CONFIG, useValue: { apiBaseUrl: '/api' } },
+      { provide: MatDialog, useClass: FakeMatDialog },
+    ],
+  }).compileComponents();
+
+  const fixture = TestBed.createComponent(TasksListPage);
+  fixture.componentRef.setInput('projectId', projectId);
+  const httpMock = TestBed.inject(HttpTestingController);
+  fixture.detectChanges();
+  const requests = httpMock.match(`/api/v1/projects/${projectId}/tasks`);
+  for (const req of requests) req.flush(paginatedTasks(tasks));
+  return {
+    component: fixture.componentInstance,
+    service: TestBed.inject(TasksService),
+    projects: TestBed.inject(ProjectService),
+    router: TestBed.inject(Router),
+    httpMock,
+  };
+}
+
 describe('TasksListPage', () => {
-  let component: TasksListPage;
-  let service: TasksService;
-  let projects: ProjectService;
-  let router: Router;
+  afterEach(() => window.localStorage.clear());
 
-  beforeEach(async () => {
-    localStorage.clear();
-    await TestBed.configureTestingModule({
-      imports: [TasksListPage],
-      providers: [
-        provideRouter([]),
-        provideHttpClient(),
-        provideHttpClientTesting(),
-        { provide: MatDialog, useClass: FakeMatDialog },
-      ],
-    }).compileComponents();
-
-    const fixture = TestBed.createComponent(TasksListPage);
-    component = fixture.componentInstance;
-    service = TestBed.inject(TasksService);
-    projects = TestBed.inject(ProjectService);
-    router = TestBed.inject(Router);
-    fixture.componentRef.setInput('projectId', '7');
-    fixture.detectChanges();
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  it('does not throw on bootstrap when api is called', async () => {
-    const http = TestBed.inject(HttpTestingController);
+  it('navigates to the board route when a task is selected', async () => {
+    const { component, router, httpMock } = await configure();
     const navSpy = vi.spyOn(router, 'navigate').mockResolvedValue(true);
-    const project = { id: 7, name: 'P', description: null, archived_at: null, created_at: '', updated_at: '' };
-    projects.setActive(project as never);
-    service.setActive(tasks[0]);
     component['select'](tasks[0]);
-    http.expectNone(() => true);
     expect(navSpy).toHaveBeenCalledWith(buildBoardRoute(7, 1));
+    httpMock.verify();
   });
 
-  it('revalidates project before navigating when projectId differs', () => {
-    const navSpy = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+  it('revalidates the active project before navigating when the task belongs to another project', async () => {
+    const { component, projects, router, httpMock } = await configure();
     const setActive = vi.spyOn(projects, 'setActive');
-    service.setActive(tasks[0]);
+    const navSpy = vi.spyOn(router, 'navigate').mockResolvedValue(true);
     component['select']({ ...tasks[0], project_id: 9 });
     expect(setActive).toHaveBeenCalled();
     expect(navSpy).toHaveBeenCalledWith(buildBoardRoute(9, 1));
+    httpMock.verify();
+  });
+
+  it('does not call setActive when the active project already matches the task project', async () => {
+    const { component, projects, router, httpMock } = await configure();
+    projects.setActive(project(7));
+    const setActive = vi.spyOn(projects, 'setActive');
+    const navSpy = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+    component['select'](tasks[0]);
+    expect(setActive).not.toHaveBeenCalled();
+    expect(navSpy).toHaveBeenCalledWith(buildBoardRoute(7, 1));
+    httpMock.verify();
   });
 });
