@@ -15,18 +15,21 @@ import { ProjectService } from '../../core/projects/project.service';
  *
  * - `projects` lives at `/modules/projects` (no `:projectId` segment —
  *   it's the project list/index).
- * - `kanban` lives under `/modules/kanban/projects/:projectId/boards...`
+ * - `tasks` lives under `/modules/tasks/projects/:projectId/tasks...`
+ *   (S2 — task list lives between projects and kanban).
+ * - `kanban` lives under `/modules/kanban/projects/:projectId/tasks/:taskId/boards...`
+ *   (S2 — the chain now carries `:taskId`).
  * - `secrets` lives under `/modules/secrets/projects/:projectId...`
  * - `users` lives at `/modules/users/:id?...` (project-agnostic — the
  *   picker keeps the URL on `/modules/users` regardless of the active
  *   project; only `users` route param changes).
  *
  * Anything else (the bare `/modules/kanban` landing, unknown routes)
- * falls through as `unknown` and the picker defaults to the highest
- * shell feature (`projects`) rather than assuming `kanban`, which was
- * the prior behavior and broke the Projects link.
+ * falls through as `unknown` and the picker defaults to the `tasks`
+ * list for the active project — that's the "bare project" landing the
+ * S2 spec mandates (S3 adds the tasks module UI).
  */
-export type PickerFeature = 'projects' | 'kanban' | 'secrets' | 'users' | 'unknown';
+export type PickerFeature = 'projects' | 'tasks' | 'kanban' | 'secrets' | 'users' | 'unknown';
 
 /**
  * Feature-scoped per-project route. Each branch corresponds to the
@@ -58,7 +61,10 @@ export interface PickerTarget {
  *    `/modules/projects` (Projects has no per-project sub-route — the
  *    active project is owned by `ProjectService`, not the URL).
  * 2. Switching projects while on Kanban navigates to the new project's
- *    boards list (the regression-fix behavior).
+ *    tasks list (S2) — the picker cannot pick a taskId on the user's
+ *    behalf, so it routes through the tasks list where the user picks
+ *    a task. The legacy behavior jumped to the boards list directly,
+ *    which broke once boards required `:taskId` in the URL.
  * 3. Switching projects while on Secrets navigates to the new project's
  *    secrets list (the regression-fix behavior).
  *
@@ -145,6 +151,9 @@ export function classifyFeature(url: string): PickerFeature {
   if (normalized === '/modules/secrets' || normalized.startsWith('/modules/secrets/')) {
     return 'secrets';
   }
+  if (normalized === '/modules/tasks' || normalized.startsWith('/modules/tasks/')) {
+    return 'tasks';
+  }
   if (normalized === '/modules/kanban' || normalized.startsWith('/modules/kanban/')) {
     return 'kanban';
   }
@@ -160,15 +169,27 @@ export function classifyFeature(url: string): PickerFeature {
  * on `ProjectService` and is reflected in the picker/UI. Returning the
  * bare feature URL keeps the user where they were when they switched
  * projects.
+ *
+ * S2: kanban and unknown both land on the tasks list for the project
+ * because the picker doesn't have a taskId in scope — the user picks
+ * one from the tasks list (S3 UI) before drilling into a board. This
+ * also matches the S2 spec's "bare project lands on
+ * /modules/tasks/projects/{p}/tasks" requirement.
  */
 export function targetFor(feature: PickerFeature, projectId: number): PickerTarget {
   switch (feature) {
     case 'projects':
       return { feature, url: '/modules/projects' };
+    case 'tasks':
+      return { feature, url: `/modules/tasks/projects/${projectId}/tasks` };
     case 'secrets':
       return { feature, url: `/modules/secrets/projects/${projectId}` };
     case 'kanban':
-      return { feature, url: `/modules/kanban/projects/${projectId}/boards` };
+      // S2: route the picker through the tasks list for the new project.
+      // Without a taskId in scope the picker cannot pick a board, and
+      // guessing one would either 404 (race) or land the user on the
+      // wrong task's boards. The tasks list lets the user pick the task.
+      return { feature: 'tasks', url: `/modules/tasks/projects/${projectId}/tasks` };
     case 'users':
       // USERS is project-agnostic — never carry a `:projectId` segment,
       // otherwise admin users would be silently bounced out of the
@@ -176,12 +197,10 @@ export function targetFor(feature: PickerFeature, projectId: number): PickerTarg
       return { feature, url: '/modules/users' };
     case 'unknown':
     default:
-      // No active feature in the URL — default to Projects (the shell's
-      // top-level entry) instead of forcing a Kanban redirect. This is
-      // the safer default because Projects is reachable from any
-      // unauthenticated-bootstrapping URL state, and never steals the
-      // user away from a deliberately visited `/modules/projects`.
-      return { feature: 'projects', url: '/modules/projects' };
+      // S2: a bare project (no feature in URL) lands on the tasks list
+      // for the active project. This is the canonical entry into the
+      // per-project Kanban workflow — pick a task, then a board.
+      return { feature: 'tasks', url: `/modules/tasks/projects/${projectId}/tasks` };
   }
 }
 

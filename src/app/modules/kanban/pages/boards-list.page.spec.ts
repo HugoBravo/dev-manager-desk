@@ -50,10 +50,12 @@ const sampleBoard = (id: number, name: string) => ({
   updated_at: '2026-01-01T00:00:00Z',
 });
 
-function createComponent(projectId = '7') {
+function createComponent(projectId = '7', taskId = String(TASK_ID)) {
   const fixture = TestBed.createComponent(BoardsListPage);
-  // Provide the required input via the binding the router uses.
+  // Provide the required inputs via the binding the router uses.
+  // S2: taskId now flows from the route, not from BoardsStore.setTaskId.
   fixture.componentRef.setInput('projectId', projectId);
+  fixture.componentRef.setInput('taskId', taskId);
   fixture.detectChanges();
   return fixture;
 }
@@ -85,8 +87,10 @@ describe('BoardsListPage', () => {
     }).compileComponents();
     // Silence snackbar dialogs in tests.
     TestBed.inject(MatSnackBar);
-    // S1: bind the store to a taskId so listBoards carries the segment.
-    TestBed.inject(BoardsStore).setTaskId(TASK_ID);
+    // S2: BoardsStore is NOT pre-bound with setTaskId. The page must
+    // derive its taskId from the route input (`setInput('taskId', ...)`
+    // inside `createComponent`) and forward it both to direct API calls
+    // and to BoardsStore.setTaskId for the store's internal loads.
   });
 
   afterEach(() => window.localStorage.clear());
@@ -251,7 +255,14 @@ describe('BoardsListPage', () => {
     await fixture.whenStable();
     fixture.detectChanges();
 
-    expect(navSpy).toHaveBeenCalledWith(['/modules/kanban/projects', 7, 'boards', 99]);
+    expect(navSpy).toHaveBeenCalledWith([
+      '/modules/kanban/projects',
+      7,
+      'tasks',
+      9,
+      'boards',
+      99,
+    ]);
   });
 
   it('per-card menu has Rename and Delete items', async () => {

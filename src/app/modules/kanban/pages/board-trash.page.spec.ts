@@ -38,7 +38,7 @@ interface MountResult {
   snackBar: MatSnackBar;
 }
 
-function createComponent(projectId = '7'): MountResult {
+function createComponent(projectId = '7', taskId = String(TASK_ID)): MountResult {
   TestBed.resetTestingModule();
   window.localStorage.clear();
   TestBed.configureTestingModule({
@@ -54,10 +54,13 @@ function createComponent(projectId = '7'): MountResult {
       ProjectService,
     ],
   });
-  // S1: bind the store to a taskId before the page's effect runs the load.
-  TestBed.inject(BoardsStore).setTaskId(TASK_ID);
+  // S2: BoardsStore is NOT pre-bound with setTaskId. The page must
+  // derive its taskId from the route input (`setInput('taskId', ...)`
+  // below) and forward it both to direct API calls and to
+  // BoardsStore.setTaskId for the store's internal loadTrash call.
   const fixture = TestBed.createComponent(BoardTrashPage);
   fixture.componentRef.setInput('projectId', projectId);
+  fixture.componentRef.setInput('taskId', taskId);
   fixture.detectChanges();
   return {
     fixture,

@@ -183,7 +183,7 @@ describe('ToolbarProjectPickerComponent', () => {
     expect(navigateByUrlSpy).toHaveBeenCalledWith('/modules/secrets/projects/2');
   });
 
-  it('navigates from /modules/kanban/projects/1/boards to /modules/kanban/projects/2/boards when the active project changes (regression: project switch on Kanban)', async () => {
+  it('navigates from /modules/kanban/projects/1/boards to /modules/tasks/projects/2/tasks when the active project changes (kanban lands on tasks list — S2 picker)', async () => {
     const service = TestBed.inject(ProjectService);
     const httpMock = TestBed.inject(HttpTestingController);
     const router = TestBed.inject(Router);
@@ -225,7 +225,9 @@ describe('ToolbarProjectPickerComponent', () => {
     service.setActive(service.projects().find((proj) => proj.id === 2) ?? null);
     TestBed.tick();
 
-    expect(navigateByUrlSpy).toHaveBeenCalledWith('/modules/kanban/projects/2/boards');
+    // S2: the picker no longer guesses a taskId; it routes to the tasks
+    // list for the new project so the user picks the task there (S3 UI).
+    expect(navigateByUrlSpy).toHaveBeenCalledWith('/modules/tasks/projects/2/tasks');
   });
 
   it('does NOT navigate when setActive picks the same project already encoded in the URL', async () => {
@@ -508,6 +510,13 @@ describe('classifyFeature / targetFor (picker routing policy)', () => {
     expect(classifyFeature('/modules/kanban/projects/1/boards')).toBe('kanban');
   });
 
+  it('classifies /modules/tasks and its sub-paths as "tasks" (S2 picker routing)', () => {
+    expect(classifyFeature('/modules/tasks')).toBe('tasks');
+    expect(classifyFeature('/modules/tasks/')).toBe('tasks');
+    expect(classifyFeature('/modules/tasks/projects/7/tasks')).toBe('tasks');
+    expect(classifyFeature('/modules/tasks/projects/7/tasks/5')).toBe('tasks');
+  });
+
   it('classifies /modules/users and its sub-paths as "users" (project-agnostic feature, regression for the USERS sidebar link)', () => {
     expect(classifyFeature('/modules/users')).toBe('users');
     expect(classifyFeature('/modules/users/')).toBe('users');
@@ -528,9 +537,16 @@ describe('classifyFeature / targetFor (picker routing policy)', () => {
       feature: 'secrets',
       url: '/modules/secrets/projects/7',
     });
+    // S2: kanban feature routes to the tasks list for the project — the
+    // picker no longer guesses a taskId; the user picks one in S3 UI.
     expect(targetFor('kanban', 7)).toEqual({
-      feature: 'kanban',
-      url: '/modules/kanban/projects/7/boards',
+      feature: 'tasks',
+      url: '/modules/tasks/projects/7/tasks',
+    });
+    // S2: explicit `tasks` feature maps to the same tasks list URL.
+    expect(targetFor('tasks', 7)).toEqual({
+      feature: 'tasks',
+      url: '/modules/tasks/projects/7/tasks',
     });
     // 'users' has no per-project sub-route — same URL regardless of projectId.
     expect(targetFor('users', 7)).toEqual({
@@ -543,10 +559,14 @@ describe('classifyFeature / targetFor (picker routing policy)', () => {
     });
   });
 
-  it('targetFor falls back to projects for unknown features (NOT kanban)', () => {
+  it('targetFor falls back to tasks list for unknown features (NOT kanban or projects) — bare project lands on tasks (S2)', () => {
     expect(targetFor('unknown', 7)).toEqual({
-      feature: 'projects',
-      url: '/modules/projects',
+      feature: 'tasks',
+      url: '/modules/tasks/projects/7/tasks',
+    });
+    expect(targetFor('unknown', 8)).toEqual({
+      feature: 'tasks',
+      url: '/modules/tasks/projects/8/tasks',
     });
   });
 

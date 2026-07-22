@@ -78,10 +78,13 @@ const paginated = <T>(data: T[]) => ({
   },
 });
 
-function createComponent(projectId = '7', boardId = '4') {
+function createComponent(projectId = '7', boardId = '4', taskId = String(TASK_ID)) {
   const fixture = TestBed.createComponent(BoardDetailPage);
+  // Provide the required inputs via the binding the router uses.
+  // S2: taskId now flows from the route, not from BoardsStore.setTaskId.
   fixture.componentRef.setInput('projectId', projectId);
   fixture.componentRef.setInput('boardId', boardId);
+  fixture.componentRef.setInput('taskId', taskId);
   fixture.detectChanges();
   return fixture;
 }
@@ -142,8 +145,10 @@ describe('BoardDetailPage', () => {
     // Silence snackbar dialogs in tests.
     TestBed.inject(MatSnackBar);
     TestBed.inject(MatDialog);
-    // S1: bind the store to a taskId so the detail fetch + writes carry the segment.
-    TestBed.inject(BoardsStore).setTaskId(TASK_ID);
+    // S2: BoardsStore is NOT pre-bound with setTaskId. The page must
+    // derive its taskId from the route input (`setInput('taskId', ...)`
+    // inside `createComponent`) and forward it both to direct API calls
+    // and to BoardsStore.setTaskId for the store's internal loads.
   });
 
   afterEach(() => window.localStorage.clear());
@@ -570,6 +575,12 @@ describe('BoardDetailPage', () => {
 
     expect(confirmSpy).toHaveBeenCalled();
     expect(deleteSpy).toHaveBeenCalledWith(7, 9, 4);
-    expect(navSpy).toHaveBeenCalledWith(['/modules/kanban/projects', 7, 'boards']);
+    expect(navSpy).toHaveBeenCalledWith([
+      '/modules/kanban/projects',
+      7,
+      'tasks',
+      9,
+      'boards',
+    ]);
   });
 });

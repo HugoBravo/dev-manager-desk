@@ -109,6 +109,15 @@ export class BoardDetailPage implements AfterViewInit {
   readonly projectId = input.required<string>();
   /** Bound from the route via `withComponentInputBinding()` */
   readonly boardId = input.required<string>();
+  /**
+   * S2: task id flows from the route
+   * (`/projects/:projectId/tasks/:taskId/boards/:boardId`). The page
+   * threads this into every direct API call (drag-drop, audit fetch,
+   * column writes) and keeps {@link BoardsStore.setTaskId} in sync so
+   * the store's internal `loadBoard` and the dialogs (which read
+   * `store.taskId`) also carry the segment.
+   */
+  readonly taskId = input.required<string>();
 
   protected readonly loading = computed(() => this.store.isDetailLoading());
   protected readonly error = computed(() => this.store.error());
@@ -180,13 +189,15 @@ export class BoardDetailPage implements AfterViewInit {
     effect(() => {
       const projectRaw = this.projectId();
       const boardRaw = this.boardId();
+      const taskRaw = this.taskId();
       // dependency tracking on reloadTrigger too
       this.reloadTrigger();
 
       const projectId = parseId(projectRaw);
       const boardId = parseId(boardRaw);
+      const taskId = parseId(taskRaw);
 
-      if (projectId === null || boardId === null) {
+      if (projectId === null || boardId === null || taskId === null) {
         this.store.invalidateDetail();
         // Surface via the error signal; page renders the error state.
         // Use the store's error via direct API call's synthetic path.
@@ -194,6 +205,11 @@ export class BoardDetailPage implements AfterViewInit {
         return;
       }
 
+      // Keep the store's taskId slot bound so the store's internal
+      // loadBoard call and the dialogs (which still read store.taskId)
+      // carry the segment. Page-level API calls use the parsed value
+      // directly so a stale binding cannot leak across routes.
+      this.store.setTaskId(taskId);
       void this.store.loadBoard(projectId, boardId);
     });
   }
@@ -224,16 +240,24 @@ export class BoardDetailPage implements AfterViewInit {
       const card = this.cardById(cardId);
       const projectIdNum = parseId(this.projectId());
       const boardIdNum = parseId(this.boardId());
-      if (card === null || projectIdNum === null || boardIdNum === null) {
+      const taskIdNum = parseId(this.taskId());
+      if (card === null || projectIdNum === null || boardIdNum === null || taskIdNum === null) {
         throw new Error('onCardDrop: missing card or route params');
       }
       // The target column id is carried on the drop container's `data` (set
       // via [cdkDropListData] in the template).
       const targetContainer = event.container.data as { columnId: number } | undefined;
       const targetColumnId = targetContainer?.columnId ?? card.column_id;
-      return this.writeApi.moveCard(projectIdNum, this.store.taskId, boardIdNum, card.column_id, card.id, {
-        to_column_id: targetColumnId,
-      });
+      return this.writeApi.moveCard(
+        projectIdNum,
+        taskIdNum,
+        boardIdNum,
+        card.column_id,
+        card.id,
+        {
+          to_column_id: targetColumnId,
+        },
+      );
     },
     onSuccess: (card) => {
       this.store.applyCardMutation(card);
@@ -259,7 +283,12 @@ export class BoardDetailPage implements AfterViewInit {
       );
       const projectIdNum = parseId(this.projectId());
       const boardIdNum = parseId(this.boardId());
-      if (projectIdNum !== null && boardIdNum !== null) {
+      const taskIdNum = parseId(this.taskId());
+      if (projectIdNum !== null && boardIdNum !== null && taskIdNum !== null) {
+        // Re-bind the store taskId so the refetch via store.loadBoard
+        // carries the segment (defensive — store taskId is already
+        // bound by the constructor effect for this route).
+        this.store.setTaskId(taskIdNum);
         void this.store.loadBoard(projectIdNum, boardIdNum);
       }
       return;
@@ -412,11 +441,12 @@ export class BoardDetailPage implements AfterViewInit {
   protected archiveColumn(column: KanbanColumn): void {
     const projectIdNum = parseId(this.projectId());
     const boardIdNum = parseId(this.boardId());
-    if (projectIdNum === null || boardIdNum === null) {
+    const taskIdNum = parseId(this.taskId());
+    if (projectIdNum === null || boardIdNum === null || taskIdNum === null) {
       return;
     }
     void this.safeColumnWrite(
-      this.writeApi.updateColumn(projectIdNum, this.store.taskId, boardIdNum, column.id, {
+      this.writeApi.updateColumn(projectIdNum, taskIdNum, boardIdNum, column.id, {
         archived_at: new Date().toISOString(),
       }),
     ).then((updated) => {
@@ -432,11 +462,12 @@ export class BoardDetailPage implements AfterViewInit {
   protected unarchiveColumn(column: KanbanColumn): void {
     const projectIdNum = parseId(this.projectId());
     const boardIdNum = parseId(this.boardId());
-    if (projectIdNum === null || boardIdNum === null) {
+    const taskIdNum = parseId(this.taskId());
+    if (projectIdNum === null || boardIdNum === null || taskIdNum === null) {
       return;
     }
     void this.safeColumnWrite(
-      this.writeApi.updateColumn(projectIdNum, this.store.taskId, boardIdNum, column.id, {
+      this.writeApi.updateColumn(projectIdNum, taskIdNum, boardIdNum, column.id, {
         archived_at: null,
       }),
     ).then((updated) => {
@@ -454,7 +485,8 @@ export class BoardDetailPage implements AfterViewInit {
   protected deleteColumn(column: KanbanColumn): void {
     const projectIdNum = parseId(this.projectId());
     const boardIdNum = parseId(this.boardId());
-    if (projectIdNum === null || boardIdNum === null) {
+    const taskIdNum = parseId(this.taskId());
+    if (projectIdNum === null || boardIdNum === null || taskIdNum === null) {
       return;
     }
     // Browser-native confirmation step. Window.confirm is sufficient
@@ -466,7 +498,9 @@ export class BoardDetailPage implements AfterViewInit {
     if (!confirmed) {
       return;
     }
-    void firstValueFrom(this.writeApi.deleteColumn(projectIdNum, this.store.taskId, boardIdNum, column.id))
+    void firstValueFrom(
+      this.writeApi.deleteColumn(projectIdNum, taskIdNum, boardIdNum, column.id),
+    )
       .then(() => {
         this.store.applyColumnRemoved(column.id);
         this.snackBar.open('Deleted', 'Dismiss', { duration: 2000 });
@@ -501,11 +535,12 @@ export class BoardDetailPage implements AfterViewInit {
   private async createColumn(name: string): Promise<void> {
     const projectIdNum = parseId(this.projectId());
     const boardIdNum = parseId(this.boardId());
-    if (projectIdNum === null || boardIdNum === null) {
+    const taskIdNum = parseId(this.taskId());
+    if (projectIdNum === null || boardIdNum === null || taskIdNum === null) {
       return;
     }
     const created = await this.safeColumnWrite(
-      this.writeApi.createColumn(projectIdNum, this.store.taskId, boardIdNum, { name }),
+      this.writeApi.createColumn(projectIdNum, taskIdNum, boardIdNum, { name }),
     );
     if (created !== null) {
       this.store.applyColumnCreated(created);
@@ -520,11 +555,12 @@ export class BoardDetailPage implements AfterViewInit {
   private async renameColumn(column: KanbanColumn, name: string): Promise<void> {
     const projectIdNum = parseId(this.projectId());
     const boardIdNum = parseId(this.boardId());
-    if (projectIdNum === null || boardIdNum === null) {
+    const taskIdNum = parseId(this.taskId());
+    if (projectIdNum === null || boardIdNum === null || taskIdNum === null) {
       return;
     }
     const updated = await this.safeColumnWrite(
-      this.writeApi.updateColumn(projectIdNum, this.store.taskId, boardIdNum, column.id, { name }),
+      this.writeApi.updateColumn(projectIdNum, taskIdNum, boardIdNum, column.id, { name }),
     );
     if (updated !== null) {
       this.store.applyColumnUpdated(updated);
@@ -579,7 +615,8 @@ export class BoardDetailPage implements AfterViewInit {
   protected openRenameBoardDialog(triggerElement: HTMLElement): void {
     const projectIdNum = parseId(this.projectId());
     const boardIdNum = parseId(this.boardId());
-    if (projectIdNum === null || boardIdNum === null) {
+    const taskIdNum = parseId(this.taskId());
+    if (projectIdNum === null || boardIdNum === null || taskIdNum === null) {
       return;
     }
     const current = this.detail()?.board;
@@ -604,7 +641,7 @@ export class BoardDetailPage implements AfterViewInit {
       if (result.name === current.name) {
         return;
       }
-      void this.renameBoard(projectIdNum, boardIdNum, result.name);
+      void this.renameBoard(projectIdNum, taskIdNum, boardIdNum, result.name);
     });
   }
 
@@ -619,7 +656,8 @@ export class BoardDetailPage implements AfterViewInit {
   protected openDeleteBoardConfirm(): void {
     const projectIdNum = parseId(this.projectId());
     const boardIdNum = parseId(this.boardId());
-    if (projectIdNum === null || boardIdNum === null) {
+    const taskIdNum = parseId(this.taskId());
+    if (projectIdNum === null || boardIdNum === null || taskIdNum === null) {
       return;
     }
     const current = this.detail()?.board;
@@ -630,7 +668,7 @@ export class BoardDetailPage implements AfterViewInit {
     if (!confirmed) {
       return;
     }
-    void this.deleteBoard(projectIdNum, boardIdNum, current.name);
+    void this.deleteBoard(projectIdNum, taskIdNum, boardIdNum, current.name);
   }
 
   /**
@@ -646,12 +684,13 @@ export class BoardDetailPage implements AfterViewInit {
     this.auditPanelOpen.set(true);
     const projectIdNum = parseId(this.projectId());
     const boardIdNum = parseId(this.boardId());
-    if (projectIdNum === null || boardIdNum === null) {
+    const taskIdNum = parseId(this.taskId());
+    if (projectIdNum === null || boardIdNum === null || taskIdNum === null) {
       return;
     }
     this.auditLoading.set(true);
     this.api
-      .listBoardAudit(projectIdNum, this.store.taskId, boardIdNum)
+      .listBoardAudit(projectIdNum, taskIdNum, boardIdNum)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (entries) => {
@@ -669,9 +708,16 @@ export class BoardDetailPage implements AfterViewInit {
       });
   }
 
-  private async renameBoard(projectIdNum: number, boardIdNum: number, name: string): Promise<void> {
+  private async renameBoard(
+    projectIdNum: number,
+    taskIdNum: number,
+    boardIdNum: number,
+    name: string,
+  ): Promise<void> {
     try {
-      await firstValueFrom(this.writeApi.updateBoard(projectIdNum, this.store.taskId, boardIdNum, { name }));
+      await firstValueFrom(
+        this.writeApi.updateBoard(projectIdNum, taskIdNum, boardIdNum, { name }),
+      );
       // Refetch the detail so the title shows the new name without a
       // race between the cached resource and the renamed one.
       await this.store.loadBoard(projectIdNum, boardIdNum);
@@ -685,11 +731,24 @@ export class BoardDetailPage implements AfterViewInit {
     }
   }
 
-  private async deleteBoard(projectIdNum: number, boardIdNum: number, name: string): Promise<void> {
+  private async deleteBoard(
+    projectIdNum: number,
+    taskIdNum: number,
+    boardIdNum: number,
+    name: string,
+  ): Promise<void> {
     try {
-      await firstValueFrom(this.writeApi.deleteBoard(projectIdNum, this.store.taskId, boardIdNum));
+      await firstValueFrom(
+        this.writeApi.deleteBoard(projectIdNum, taskIdNum, boardIdNum),
+      );
       this.snackBar.open(`Moved "${name}" to trash`, 'Dismiss', { duration: 2500 });
-      void this.router.navigate(['/modules/kanban/projects', projectIdNum, 'boards']);
+      void this.router.navigate([
+        '/modules/kanban/projects',
+        projectIdNum,
+        'tasks',
+        taskIdNum,
+        'boards',
+      ]);
     } catch (err) {
       const apiError = err as ApiError | unknown;
       if (

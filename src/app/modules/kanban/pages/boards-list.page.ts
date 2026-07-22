@@ -86,6 +86,13 @@ export class BoardsListPage {
 
   /** Bound from the route via `withComponentInputBinding()` */
   readonly projectId = input.required<string>();
+  /**
+   * S2: task id flows from the route (`/projects/:projectId/tasks/:taskId/boards`).
+   * The page threads this value into every direct API call and keeps
+   * {@link BoardsStore.setTaskId} in sync so the store's internal
+   * `loadBoards` / `loadTrash` / `loadBoard` calls also carry the segment.
+   */
+  readonly taskId = input.required<string>();
 
   protected readonly boards = computed(() => this.store.boards());
   protected readonly loading = signal(true);
@@ -114,32 +121,40 @@ export class BoardsListPage {
 
   constructor() {
     effect(() => {
-      const raw = this.projectId();
-      const projectId = readProjectId(raw);
+      const rawProject = this.projectId();
+      const rawTask = this.taskId();
+      const projectId = readProjectId(rawProject);
+      const taskId = readTaskId(rawTask);
       // Reset selection on every project change so a stale id from
       // another project never ends up in a bulk request.
       this.selection.set(new Set());
-      if (projectId === null) {
+      if (projectId === null || taskId === null) {
         this.loading.set(false);
         return;
       }
-      this.fetch(projectId);
+      // Keep the store's taskId slot bound so dialogs (which still
+      // read store.taskId) and the store's internal loads carry the
+      // segment. The page itself uses the parsed `taskId` value
+      // directly so a stale store binding cannot leak across routes.
+      this.store.setTaskId(taskId);
+      this.fetch(projectId, taskId);
     });
   }
 
   protected retry(): void {
-    const raw = readProjectId(this.projectId());
-    if (raw === null) {
+    const projectId = readProjectId(this.projectId());
+    const taskId = readTaskId(this.taskId());
+    if (projectId === null || taskId === null) {
       return;
     }
-    this.fetch(raw);
+    this.fetch(projectId, taskId);
   }
 
-  private fetch(projectId: number): void {
+  private fetch(projectId: number, taskId: number): void {
     this.loading.set(true);
     this.error.set(null);
     this.api
-      .listBoards(projectId, this.store.taskId)
+      .listBoards(projectId, taskId)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (boards) => {
@@ -158,9 +173,19 @@ export class BoardsListPage {
   }
 
   protected openBoard(boardId: number): void {
-    const raw = readProjectId(this.projectId());
-    const projectId = raw === null ? requireProjectId(raw) : raw;
-    void this.router.navigate(['/modules/kanban/projects', projectId, 'boards', boardId]);
+    const projectId = readProjectId(this.projectId());
+    const taskId = readTaskId(this.taskId());
+    if (projectId === null || taskId === null) {
+      return;
+    }
+    void this.router.navigate([
+      '/modules/kanban/projects',
+      projectId,
+      'tasks',
+      taskId,
+      'boards',
+      boardId,
+    ]);
   }
 
   /**
@@ -186,7 +211,8 @@ export class BoardsListPage {
    */
   protected openCreateBoardDialog(triggerElement: HTMLElement): void {
     const projectIdNum = readProjectId(this.projectId());
-    if (projectIdNum === null) {
+    const taskIdNum = readTaskId(this.taskId());
+    if (projectIdNum === null || taskIdNum === null) {
       return;
     }
     const data: BoardEditorDialogData = {
@@ -202,7 +228,7 @@ export class BoardsListPage {
       if (!result || result.action !== 'saved' || !result.name) {
         return;
       }
-      void this.createBoard(projectIdNum, result.name);
+      void this.createBoard(projectIdNum, taskIdNum, result.name);
     });
   }
 
@@ -213,7 +239,8 @@ export class BoardsListPage {
    */
   protected openRenameBoardDialog(board: Board, triggerElement: HTMLElement): void {
     const projectIdNum = readProjectId(this.projectId());
-    if (projectIdNum === null) {
+    const taskIdNum = readTaskId(this.taskId());
+    if (projectIdNum === null || taskIdNum === null) {
       return;
     }
     const data: BoardEditorDialogData = {
@@ -234,7 +261,7 @@ export class BoardsListPage {
       if (result.name === board.name) {
         return;
       }
-      void this.renameBoard(projectIdNum, board, result.name);
+      void this.renameBoard(projectIdNum, taskIdNum, board, result.name);
     });
   }
 
@@ -246,24 +273,34 @@ export class BoardsListPage {
    */
   protected openDeleteBoardConfirm(board: Board): void {
     const projectIdNum = readProjectId(this.projectId());
-    if (projectIdNum === null) {
+    const taskIdNum = readTaskId(this.taskId());
+    if (projectIdNum === null || taskIdNum === null) {
       return;
     }
     const confirmed = window.confirm(`Delete board "${board.name}"? This moves it to the trash.`);
     if (!confirmed) {
       return;
     }
-    this.deleteBoard(projectIdNum, board);
+    this.deleteBoard(projectIdNum, taskIdNum, board);
   }
 
-  private async createBoard(projectIdNum: number, name: string): Promise<void> {
+  private async createBoard(projectIdNum: number, taskIdNum: number, name: string): Promise<void> {
     try {
-      const created = await firstValueFrom(this.writeApi.createBoard(projectIdNum, this.store.taskId, { name }));
+      const created = await firstValueFrom(
+        this.writeApi.createBoard(projectIdNum, taskIdNum, { name }),
+      );
       this.store.applyBoardCreated(created);
       this.snackBar.open(`Created board "${created.name}"`, 'Dismiss', {
         duration: 2500,
       });
-      void this.router.navigate(['/modules/kanban/projects', projectIdNum, 'boards', created.id]);
+      void this.router.navigate([
+        '/modules/kanban/projects',
+        projectIdNum,
+        'tasks',
+        taskIdNum,
+        'boards',
+        created.id,
+      ]);
     } catch (err) {
       this.snackBar.open(toUserMessage(err, 'Could not create the board.'), 'Dismiss', {
         duration: 4000,
@@ -271,10 +308,15 @@ export class BoardsListPage {
     }
   }
 
-  private async renameBoard(projectIdNum: number, board: Board, name: string): Promise<void> {
+  private async renameBoard(
+    projectIdNum: number,
+    taskIdNum: number,
+    board: Board,
+    name: string,
+  ): Promise<void> {
     try {
       const updated = await firstValueFrom(
-        this.writeApi.updateBoard(projectIdNum, this.store.taskId, board.id, { name }),
+        this.writeApi.updateBoard(projectIdNum, taskIdNum, board.id, { name }),
       );
       this.store.applyBoardUpdated(updated);
       this.snackBar.open(`Renamed to "${updated.name}"`, 'Dismiss', {
@@ -288,7 +330,7 @@ export class BoardsListPage {
         'kind' in apiError &&
         (apiError as ApiError).kind === 'validation'
       ) {
-        this.openConflictDialog(board, this.conflictMessage(apiError));
+        this.openConflictDialog(board, this.conflictMessage(apiError), taskIdNum);
         return;
       }
       this.snackBar.open(toUserMessage(err, 'Could not rename the board.'), 'Dismiss', {
@@ -297,9 +339,13 @@ export class BoardsListPage {
     }
   }
 
-  private async deleteBoard(projectIdNum: number, board: Board): Promise<void> {
+  private async deleteBoard(
+    projectIdNum: number,
+    taskIdNum: number,
+    board: Board,
+  ): Promise<void> {
     try {
-      await firstValueFrom(this.writeApi.deleteBoard(projectIdNum, this.store.taskId, board.id));
+      await firstValueFrom(this.writeApi.deleteBoard(projectIdNum, taskIdNum, board.id));
       this.store.applyBoardRemoved(board.id);
       // Also drop the id from the selection so a stale entry can't end up
       // in a subsequent bulk request.
@@ -323,7 +369,7 @@ export class BoardsListPage {
         (apiError as ApiError).kind === 'conflict' &&
         (apiError as { code?: string }).code === 'board_has_contents'
       ) {
-        this.openConflictDialog(board, this.conflictMessage(apiError));
+        this.openConflictDialog(board, this.conflictMessage(apiError), taskIdNum);
         return;
       }
       this.snackBar.open(toUserMessage(err, 'Could not delete the board.'), 'Dismiss', {
@@ -337,7 +383,7 @@ export class BoardsListPage {
    * dialog exposes an "Open" action that lets the user navigate to the
    * board so they can empty it before retrying.
    */
-  private openConflictDialog(board: Board, message: string): void {
+  private openConflictDialog(board: Board, message: string, taskIdNum: number): void {
     const projectIdNum = readProjectId(this.projectId());
     if (projectIdNum === null) {
       return;
@@ -348,6 +394,8 @@ export class BoardsListPage {
       navigateTarget: [
         '/modules/kanban/projects',
         String(projectIdNum),
+        'tasks',
+        String(taskIdNum),
         'boards',
         String(board.id),
       ],
@@ -375,7 +423,8 @@ export class BoardsListPage {
    */
   protected async runBulkDelete(): Promise<void> {
     const projectIdNum = readProjectId(this.projectId());
-    if (projectIdNum === null) {
+    const taskIdNum = readTaskId(this.taskId());
+    if (projectIdNum === null || taskIdNum === null) {
       return;
     }
     const ids = [...this.selection()];
@@ -390,7 +439,7 @@ export class BoardsListPage {
         }
       }
       // Refresh the list cache so the page reflects server state.
-      this.fetch(projectIdNum);
+      this.fetch(projectIdNum, taskIdNum);
       this.selection.set(new Set());
       if (result.summary.failed > 0) {
         this.snackBar.open(
@@ -418,7 +467,8 @@ export class BoardsListPage {
    */
   protected runBulkRename(mode: 'add' | 'remove'): void {
     const projectIdNum = readProjectId(this.projectId());
-    if (projectIdNum === null) {
+    const taskIdNum = readTaskId(this.taskId());
+    if (projectIdNum === null || taskIdNum === null) {
       return;
     }
     const ids = [...this.selection()];
@@ -430,11 +480,12 @@ export class BoardsListPage {
     if (prefix === null || prefix.trim() === '') {
       return;
     }
-    void this.performBulkRename(projectIdNum, ids, prefix.trim(), mode);
+    void this.performBulkRename(projectIdNum, taskIdNum, ids, prefix.trim(), mode);
   }
 
   private async performBulkRename(
     projectIdNum: number,
+    taskIdNum: number,
     ids: readonly number[],
     prefix: string,
     mode: 'add' | 'remove',
@@ -451,7 +502,7 @@ export class BoardsListPage {
           void item;
         }
       }
-      this.fetch(projectIdNum);
+      this.fetch(projectIdNum, taskIdNum);
       this.selection.set(new Set());
       this.snackBar.open(
         `${result.summary.ok} renamed, ${result.summary.failed} failed`,
@@ -491,6 +542,17 @@ export class BoardsListPage {
 }
 
 function readProjectId(raw: string): number | null {
+  const parsed = Number(raw);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+/**
+ * S2: parse the `:taskId` route segment. Same shape as
+ * {@link readProjectId} — kept as a named helper so the call sites
+ * read as `taskId = readTaskId(this.taskId())` and an obvious null
+ * check follows.
+ */
+function readTaskId(raw: string): number | null {
   const parsed = Number(raw);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 }

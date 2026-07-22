@@ -50,6 +50,14 @@ export class BoardTrashPage {
 
   /** Bound from the route via `withComponentInputBinding()` */
   readonly projectId = input.required<string>();
+  /**
+   * S2: task id flows from the route
+   * (`/projects/:projectId/tasks/:taskId/boards/trash`). The page
+   * threads this into the per-row restore write and keeps
+   * {@link BoardsStore.setTaskId} in sync so the store's internal
+   * `loadTrash` call also carries the segment.
+   */
+  readonly taskId = input.required<string>();
 
   protected readonly trash = computed(() => this.store.trash());
   protected readonly loading = computed(() => this.store.trashLoading());
@@ -76,13 +84,20 @@ export class BoardTrashPage {
 
   constructor() {
     effect(() => {
-      const raw = this.projectId();
-      const projectId = parseId(raw);
+      const rawProject = this.projectId();
+      const rawTask = this.taskId();
+      const projectId = parseId(rawProject);
+      const taskId = parseId(rawTask);
       // depend on reloadTrigger so Retry re-runs the load
       this.reloadTrigger();
-      if (projectId === null) {
+      if (projectId === null || taskId === null) {
         return;
       }
+      // Keep the store's taskId slot bound so the store's internal
+      // loadTrash call carries the segment. The restore flow uses the
+      // parsed value directly so a stale binding cannot leak across
+      // routes.
+      this.store.setTaskId(taskId);
       void this.store.loadTrash(projectId);
     });
   }
@@ -100,7 +115,8 @@ export class BoardTrashPage {
    */
   protected async restoreBoard(board: Board, triggerElement: HTMLElement): Promise<void> {
     const projectId = parseId(this.projectId());
-    if (projectId === null) {
+    const taskId = parseId(this.taskId());
+    if (projectId === null || taskId === null) {
       return;
     }
     if (this.restoringIds().has(board.id)) {
@@ -108,7 +124,9 @@ export class BoardTrashPage {
     }
     this.markRestoring(board.id, true);
     try {
-      const restored = await firstValueFrom(this.writeApi.restoreBoard(projectId, this.store.taskId, board.id));
+      const restored = await firstValueFrom(
+        this.writeApi.restoreBoard(projectId, taskId, board.id),
+      );
       this.store.applyBoardRestored(restored);
       // Drop the row from the trash view. The store's trash signal
       // is the source of truth for the rendered list — removing it
