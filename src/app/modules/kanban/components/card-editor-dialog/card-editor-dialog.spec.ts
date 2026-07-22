@@ -21,6 +21,8 @@ import {
 import { CardLabelsPicker } from '../card-labels-picker/card-labels-picker';
 import { LabelChip } from '../label-chip/label-chip';
 
+const TASK_ID = 9;
+
 const API_BASE_URL = 'http://localhost:8000/api';
 
 function sampleCard(overrides: Partial<KanbanCard> = {}): KanbanCard {
@@ -99,6 +101,7 @@ describe('CardEditorDialog', () => {
     const { fixture } = mountDialog({
       mode: 'create',
       projectId: 7,
+      taskId: TASK_ID,
       boardId: 4,
       columnId: 12,
     });
@@ -130,6 +133,7 @@ describe('CardEditorDialog', () => {
     const { fixture, labelsStore } = mountDialog({
       mode: 'edit',
       projectId: 7,
+      taskId: TASK_ID,
       boardId: 4,
       columnId: 12,
       card: sampleCard({ labels: [bug] }),
@@ -178,6 +182,7 @@ describe('CardEditorDialog', () => {
     const { fixture, labelsStore } = mountDialog({
       mode: 'edit',
       projectId: 7,
+      taskId: TASK_ID,
       boardId: 4,
       columnId: 12,
       card: sampleCard({ labels: [bug] }),
@@ -216,6 +221,7 @@ describe('CardEditorDialog', () => {
     const { fixture, labelsStore, httpMock } = mountDialog({
       mode: 'edit',
       projectId: 7,
+      taskId: TASK_ID,
       boardId: 4,
       columnId: 12,
       card: sampleCard({ labels: [bug] }),

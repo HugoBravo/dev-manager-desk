@@ -542,6 +542,8 @@ describe('BoardDetailPage', () => {
     expect(data.mode).toBe('rename');
     expect(data.boardId).toBe(4);
     expect(data.initialName).toBe('Sprint 42');
+    // S4: taskId is part of the editor dialog data shape.
+    expect(data.taskId).toBe(TASK_ID);
   });
 
   it('clicking Delete confirms then calls deleteBoard; on 204 navigates to the boards list', async () => {

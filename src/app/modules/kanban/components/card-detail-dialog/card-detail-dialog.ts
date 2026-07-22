@@ -32,6 +32,7 @@ import { LabelsStore } from '../../stores/labels.store';
 import type { KanbanCard, KanbanLabel } from '../../models';
 import type { KanbanComment } from '../../models';
 import { MarkdownPipe } from '../../../../shared/pipes/markdown.pipe';
+import { buildBoardRoute } from '../../utils/build-board-route';
 import { CardLabelsStrip } from '../card-labels-strip/card-labels-strip';
 import { CardLabelsPicker } from '../card-labels-picker/card-labels-picker';
 import {
@@ -54,10 +55,17 @@ import {
  *
  * `triggerElement` is the element that opened the dialog — the dialog returns
  * focus to it on close (WCAG AA focus management).
+ *
+ * S4: `taskId` is REQUIRED on the wire shape so the dialog threads the task
+ * into its own archive/restore/deleteCard calls without depending on the
+ * `BoardsStore.taskId` slot. The owning page already binds `BoardsStore` and
+ * `CommentsStore` / `AttachmentsStore` to the same taskId in its constructor
+ * effect so the secondary stores keep working off their `taskId` slot.
  */
 export interface CardDetailDialogData {
   readonly card: KanbanCard;
   readonly projectId: number;
+  readonly taskId: number;
   readonly boardId: number;
   readonly columnId: number;
   readonly triggerElement?: HTMLElement;
@@ -708,6 +716,7 @@ export class CardDetailDialog implements OnInit {
         data: {
           mode: 'edit',
           projectId: this.data.projectId,
+          taskId: this.data.taskId,
           boardId: this.data.boardId,
           columnId: this.data.columnId,
           card: this.card(),
@@ -726,7 +735,7 @@ export class CardDetailDialog implements OnInit {
       const updated = await firstValueFrom(
         this.writeApi.archiveCard(
           this.data.projectId,
-          this.store.taskId,
+          this.data.taskId,
           this.data.boardId,
           this.data.columnId,
           this.data.card.id,
@@ -744,7 +753,7 @@ export class CardDetailDialog implements OnInit {
       const updated = await firstValueFrom(
         this.writeApi.restoreCard(
           this.data.projectId,
-          this.store.taskId,
+          this.data.taskId,
           this.data.boardId,
           this.data.columnId,
           this.data.card.id,
@@ -762,7 +771,7 @@ export class CardDetailDialog implements OnInit {
       await firstValueFrom(
         this.writeApi.deleteCard(
           this.data.projectId,
-          this.store.taskId,
+          this.data.taskId,
           this.data.boardId,
           this.data.columnId,
           this.data.card.id,
@@ -979,12 +988,15 @@ export class CardDetailDialog implements OnInit {
     const conflictData: BoardConflictDialogData = {
       entityType: 'column',
       entityName: `column ${this.data.columnId}`,
-      navigateTarget: [
-        '/modules/kanban/projects',
-        String(this.data.projectId),
-        'boards',
-        String(this.data.boardId),
-      ],
+      // S4: route through buildBoardRoute() so the URL chain carries the
+      // taskId segment. The legacy `projects/{p}/boards/{b}` shape
+      // (project-level Kanban, no task) is gone — every conflict nav
+      // lands the user back in the canonical task-scoped Kanban.
+      navigateTarget: buildBoardRoute(
+        this.data.projectId,
+        this.data.taskId,
+        this.data.boardId,
+      ),
       message:
         error.kind === 'conflict' && error.code === 'column_has_contents'
           ? 'This column still has cards. Move or delete them first.'

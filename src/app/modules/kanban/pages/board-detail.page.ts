@@ -313,7 +313,8 @@ export class BoardDetailPage implements AfterViewInit {
   protected openCard(card: KanbanCard, triggerElement: HTMLElement): void {
     const projectIdNum = parseId(this.projectId());
     const boardIdNum = parseId(this.boardId());
-    if (projectIdNum === null || boardIdNum === null) {
+    const taskIdNum = parseId(this.taskId());
+    if (projectIdNum === null || boardIdNum === null || taskIdNum === null) {
       return;
     }
     const columnOfCard = this.columnOfCard(card.id);
@@ -322,6 +323,7 @@ export class BoardDetailPage implements AfterViewInit {
     const data: CardDetailDialogData = {
       card,
       projectId: projectIdNum,
+      taskId: taskIdNum,
       boardId: boardIdNum,
       columnId,
       triggerElement,
@@ -346,12 +348,14 @@ export class BoardDetailPage implements AfterViewInit {
   protected openCreateCard(columnId: number): void {
     const projectIdNum = parseId(this.projectId());
     const boardIdNum = parseId(this.boardId());
-    if (projectIdNum === null || boardIdNum === null) {
+    const taskIdNum = parseId(this.taskId());
+    if (projectIdNum === null || boardIdNum === null || taskIdNum === null) {
       return;
     }
     const data: CardEditorDialogData = {
       mode: 'create',
       projectId: projectIdNum,
+      taskId: taskIdNum,
       boardId: boardIdNum,
       columnId,
     };
@@ -626,6 +630,7 @@ export class BoardDetailPage implements AfterViewInit {
     const data: BoardEditorDialogData = {
       mode: 'rename',
       projectId: projectIdNum,
+      taskId: taskIdNum,
       boardId: boardIdNum,
       initialName: current.name,
       triggerElement,

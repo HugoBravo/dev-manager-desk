@@ -30,6 +30,7 @@ import { BulkActionsBar } from '../components/bulk-actions-bar/bulk-actions-bar'
 import { requireProjectId } from '../guards/project-required.guard';
 import type { Board, BulkOperationResult } from '../models';
 import { BoardsStore } from '../stores/boards.store';
+import { buildBoardRoute } from '../utils/build-board-route';
 
 /**
  * Boards list. Reads the boards cache from {@link BoardsStore} (the single
@@ -218,6 +219,7 @@ export class BoardsListPage {
     const data: BoardEditorDialogData = {
       mode: 'create',
       projectId: projectIdNum,
+      taskId: taskIdNum,
       triggerElement,
     };
     const ref = this.dialog.open<BoardEditorDialog, BoardEditorDialogData, BoardEditorDialogResult>(
@@ -246,6 +248,7 @@ export class BoardsListPage {
     const data: BoardEditorDialogData = {
       mode: 'rename',
       projectId: projectIdNum,
+      taskId: taskIdNum,
       boardId: board.id,
       initialName: board.name,
       triggerElement,
@@ -382,6 +385,10 @@ export class BoardsListPage {
    * Open {@link BoardConflictDialog} with the typed 409 message. The
    * dialog exposes an "Open" action that lets the user navigate to the
    * board so they can empty it before retrying.
+   *
+   * S4: navigateTarget is built via {@link buildBoardRoute} so the URL
+   * chain is always the canonical task-scoped shape — never the legacy
+   * project-level `projects/{p}/boards/{b}` form.
    */
   private openConflictDialog(board: Board, message: string, taskIdNum: number): void {
     const projectIdNum = readProjectId(this.projectId());
@@ -391,14 +398,7 @@ export class BoardsListPage {
     const data: BoardConflictDialogData = {
       entityType: 'board',
       entityName: board.name,
-      navigateTarget: [
-        '/modules/kanban/projects',
-        String(projectIdNum),
-        'tasks',
-        String(taskIdNum),
-        'boards',
-        String(board.id),
-      ],
+      navigateTarget: buildBoardRoute(projectIdNum, taskIdNum, board.id),
       message,
     };
     const ref = this.dialog.open<

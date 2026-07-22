@@ -21,9 +21,17 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
  *
  * Two modes:
  * - `create` — opens empty for a new board. `initialName` is ignored and
- *   `projectId` is required (the caller POSTs to the project's collection).
+ *   `projectId` + `taskId` are required (the caller POSTs to the
+ *   task-scoped kanban collection).
  * - `rename` — opens prefilled with the existing board name. `boardId`
- *   carries the target id and `projectId` scopes the PATCH endpoint.
+ *   carries the target id and `projectId` + `taskId` scope the PATCH
+ *   endpoint.
+ *
+ * S4: `taskId` is REQUIRED on the wire shape so the editor stays
+ * self-contained when the dialog is opened from a page that doesn't
+ * bind `BoardsStore.taskId` (e.g. a "promote task" flow from the tasks
+ * module). The owning page forwards the same value it threads into the
+ * URL chain.
  *
  * `triggerElement` is the element that opened the dialog; focus is
  * restored to it on close (WCAG AA focus management). The dialog does
@@ -34,6 +42,7 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 export interface BoardEditorDialogData {
   readonly mode: 'create' | 'rename';
   readonly projectId?: number;
+  readonly taskId: number;
   readonly boardId?: number;
   readonly initialName?: string;
   readonly triggerElement?: HTMLElement;

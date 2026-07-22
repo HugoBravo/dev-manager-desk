@@ -217,6 +217,9 @@ describe('BoardsListPage', () => {
     const data = boardDialogCall![1]?.data as BoardEditorDialogData;
     expect(data.mode).toBe('create');
     expect(data.projectId).toBe(7);
+    // S4: dialog data carries taskId so the editor can thread it into
+    // the canonical URL chain without reading it from BoardsStore.
+    expect(data.taskId).toBe(TASK_ID);
   });
 
   it('submitting create calls writeApi.createBoard and navigates to new board', async () => {
@@ -339,6 +342,8 @@ describe('BoardsListPage', () => {
     expect(data.mode).toBe('rename');
     expect(data.boardId).toBe(1);
     expect(data.initialName).toBe('Sprint 42');
+    // S4: dialog data carries taskId for rename-mode as well.
+    expect(data.taskId).toBe(TASK_ID);
 
     expect(updateSpy).toHaveBeenCalledWith(7, 9, 1, { name: 'Sprint 99' });
 
@@ -404,6 +409,21 @@ describe('BoardsListPage', () => {
       (call) => (call[1]?.data as { entityType?: string } | undefined)?.entityType === 'board',
     );
     expect(conflictCalls.length).toBeGreaterThanOrEqual(1);
+    // S4: the conflict dialog's navigateTarget must use buildBoardRoute()
+    // so the URL chain carries the taskId segment. The legacy
+    // `projects/{p}/boards/{b}` shape is no longer used anywhere in the
+    // client.
+    const conflictData = conflictCalls[0]?.[1]?.data as
+      | { navigateTarget: readonly (string | number)[] | null }
+      | undefined;
+    expect(conflictData?.navigateTarget).toEqual([
+      '/modules/kanban/projects',
+      7,
+      'tasks',
+      TASK_ID,
+      'boards',
+      1,
+    ]);
   });
 
   it('selection checkbox toggles the selection set', async () => {

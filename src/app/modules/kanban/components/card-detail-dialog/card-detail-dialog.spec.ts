@@ -80,6 +80,7 @@ function mountDialog(opts: { archived?: boolean } = {}) {
         useValue: {
           card,
           projectId: 7,
+          taskId: TASK_ID,
           boardId: 4,
           columnId: 12,
           triggerElement,
@@ -273,6 +274,47 @@ describe('CardDetailDialog', () => {
     expect(conflictHost).not.toBeNull();
     expect(conflictHost?.textContent).toContain('This column still has cards.');
     expect(conflictHost?.textContent).toContain('Column has contents');
+    httpMock.verify();
+  });
+
+  it('Delete 409 conflict dialog opens with a task-scoped navigateTarget (S4)', async () => {
+    // S4: the conflict dialog's navigateTarget must be non-null (i.e.
+    // the canonical task-scoped URL chain via buildBoardRoute, never the
+    // legacy project-level `projects/{p}/boards/{b}` shape). We assert
+    // it via the dialog's UI affordance — the Open button is enabled
+    // iff navigateTarget is set. The exact URL chain is asserted in
+    // boards-list.page.spec.ts (where the spy-based URL capture works
+    // because the page navigates synchronously after the dialog closes)
+    // and in build-board-route.spec.ts.
+    const { fixture, httpMock } = mountDialog();
+    flushInitialLoads(httpMock, baseUrl());
+    await fixture.whenStable();
+
+    const deleteButton = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(
+      'button[aria-label="Delete card"]',
+    )!;
+    deleteButton.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const req = httpMock.expectOne(`${cardsBase(7, 4, 12)}/87`);
+    req.flush(
+      { message: 'This board still has columns.', code: 'board_has_contents' },
+      { status: 409, statusText: 'Conflict' },
+    );
+    await stabilize(fixture, 4);
+
+    const conflictHost = document.body.querySelector('app-board-conflict-dialog');
+    expect(conflictHost).not.toBeNull();
+    // The Open button is enabled ONLY when navigateTarget is set. With
+    // the legacy `projects/{p}/boards/{b}` shape, navigateTarget was a
+    // legacy URL — under S4 it's the task-scoped chain so the button is
+    // always enabled when the dialog opens.
+    const openButton = conflictHost?.querySelector<HTMLButtonElement>(
+      'button[aria-label^="Open "]',
+    );
+    expect(openButton).not.toBeNull();
+    expect(openButton?.disabled).toBe(false);
     httpMock.verify();
   });
 

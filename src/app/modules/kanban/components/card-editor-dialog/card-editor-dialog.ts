@@ -66,12 +66,19 @@ export type CardEditorMode = 'create' | 'edit';
 /**
  * Data passed to {@link CardEditorDialog}.
  *
- * `projectId`, `boardId`, `columnId` scope the create (the API needs the
- * full path). For `mode === 'edit'`, `card` prefills the form.
+ * `projectId`, `taskId`, `boardId`, `columnId` scope the create (the API
+ * needs the full path). For `mode === 'edit'`, `card` prefills the form.
+ *
+ * S4: `taskId` is REQUIRED on the wire shape so the dialog threads the
+ * task into its own create/update calls without depending on the
+ * `BoardsStore.taskId` slot. The owning page binds `BoardsStore.taskId`
+ * before opening the dialog, but the dialog stays self-contained: it
+ * reads `this.data.taskId` directly.
  */
 export interface CardEditorDialogData {
   readonly mode: CardEditorMode;
   readonly projectId: number;
+  readonly taskId: number;
   readonly boardId: number;
   readonly columnId: number;
   readonly card?: KanbanCard;
@@ -248,7 +255,7 @@ export class CardEditorDialog implements OnInit {
     this.serverFieldErrors.set(null);
     this.generalError.set(null);
 
-    const submitted = await submit(this.cardForm, async () => {
+      const submitted = await submit(this.cardForm, async () => {
       const model = this.cardForm().value();
       const dueDateIso = toIsoDate(this.dueDate());
       try {
@@ -257,7 +264,7 @@ export class CardEditorDialog implements OnInit {
             ? await firstValueFrom(
                 this.writeApi.createCard(
                   this.data.projectId,
-                  this.store.taskId,
+                  this.data.taskId,
                   this.data.boardId,
                   this.data.columnId,
                   {
@@ -270,7 +277,7 @@ export class CardEditorDialog implements OnInit {
             : await firstValueFrom(
                 this.writeApi.updateCard(
                   this.data.projectId,
-                  this.store.taskId,
+                  this.data.taskId,
                   this.data.boardId,
                   this.data.columnId,
                   this.data.card!.id,

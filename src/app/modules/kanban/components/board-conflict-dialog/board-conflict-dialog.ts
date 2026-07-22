@@ -12,11 +12,16 @@ import { MatIconModule } from '@angular/material/icon';
  * `navigateTarget` (optional) is the route the user can jump to so they can
  * inspect the offending parent. When the server does not return a target
  * id, this is `null` and the "Open" action is disabled.
+ *
+ * S4: accepts `(string | number)[]` so callers can pass the result of
+ * {@link buildBoardRoute} directly. Angular's router coerces number path
+ * segments to strings at navigation time, so the dialog does not need to
+ * stringify them before opening.
  */
 export interface BoardConflictDialogData {
   readonly entityType: 'board' | 'column';
   readonly entityName: string;
-  readonly navigateTarget: readonly string[] | null;
+  readonly navigateTarget: readonly (string | number)[] | null;
   readonly message: string;
 }
 
@@ -29,7 +34,7 @@ export type BoardConflictDialogResult =
   | { readonly action: 'cancel' }
   | {
       readonly action: 'open';
-      readonly navigateTo: readonly string[];
+      readonly navigateTo: readonly (string | number)[];
     };
 
 /**

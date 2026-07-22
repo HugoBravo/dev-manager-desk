@@ -91,7 +91,7 @@ describe('BoardEditorDialog', () => {
   afterEach(() => cleanupTriggers());
 
   it('opens in create mode with empty name and submit disabled', async () => {
-    const { fixture, closeSpy } = mountDialog({ mode: 'create', projectId: 1 });
+    const { fixture, closeSpy } = mountDialog({ mode: 'create', projectId: 1, taskId: 9 });
     await fixture.whenStable();
     fixture.detectChanges();
 
@@ -112,6 +112,7 @@ describe('BoardEditorDialog', () => {
     const { fixture, closeSpy } = mountDialog({
       mode: 'rename',
       boardId: 7,
+      taskId: 9,
       initialName: 'Sprint 1',
     });
     await fixture.whenStable();
@@ -131,7 +132,7 @@ describe('BoardEditorDialog', () => {
   });
 
   it('submit emits { action: "saved", name } with trimmed name', async () => {
-    const { fixture, closeSpy } = mountDialog({ mode: 'create', projectId: 1 });
+    const { fixture, closeSpy } = mountDialog({ mode: 'create', projectId: 1, taskId: 9 });
     await fixture.whenStable();
     fixture.detectChanges();
 
@@ -153,7 +154,7 @@ describe('BoardEditorDialog', () => {
   });
 
   it('cancel emits { action: "cancel" }', async () => {
-    const { fixture, closeSpy } = mountDialog({ mode: 'create', projectId: 1 });
+    const { fixture, closeSpy } = mountDialog({ mode: 'create', projectId: 1, taskId: 9 });
     await fixture.whenStable();
     fixture.detectChanges();
 
@@ -168,7 +169,7 @@ describe('BoardEditorDialog', () => {
     // Empty — disabled by default in create mode (covered above). Confirm
     // explicitly for the test name contract.
     {
-      const { fixture } = mountDialog({ mode: 'create', projectId: 1 });
+      const { fixture } = mountDialog({ mode: 'create', projectId: 1, taskId: 9 });
       await fixture.whenStable();
       fixture.detectChanges();
       const host = fixture.nativeElement as HTMLElement;
@@ -178,7 +179,7 @@ describe('BoardEditorDialog', () => {
 
     // Whitespace-only after the user types into the field.
     {
-      const { fixture, closeSpy } = mountDialog({ mode: 'create', projectId: 1 });
+      const { fixture, closeSpy } = mountDialog({ mode: 'create', projectId: 1, taskId: 9 });
       await fixture.whenStable();
       fixture.detectChanges();
       const host = fixture.nativeElement as HTMLElement;
@@ -205,7 +206,7 @@ describe('BoardEditorDialog', () => {
     // want Signal Forms to receive the full 101 chars and mark the
     // form invalid.
     {
-      const { fixture, closeSpy } = mountDialog({ mode: 'create', projectId: 1 });
+      const { fixture, closeSpy } = mountDialog({ mode: 'create', projectId: 1, taskId: 9 });
       await fixture.whenStable();
       fixture.detectChanges();
       const host = fixture.nativeElement as HTMLElement;
@@ -233,6 +234,7 @@ describe('BoardEditorDialog', () => {
     const { fixture, triggerElement, closeSpy } = mountDialog({
       mode: 'create',
       projectId: 1,
+      taskId: 9,
     });
     await fixture.whenStable();
     fixture.detectChanges();
