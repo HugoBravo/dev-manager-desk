@@ -81,6 +81,9 @@ export class TasksListPage {
 
   protected select(task: Task): void {
     const projectId = task.project_id;
+    if (this.projects.currentId() !== projectId) {
+      this.projects.setActive({ id: projectId } as never);
+    }
     this.service.setActive(task);
     void this.router.navigate(buildBoardRoute(projectId, task.id));
   }
