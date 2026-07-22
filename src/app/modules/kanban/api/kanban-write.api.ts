@@ -380,7 +380,7 @@ export class KanbanWriteApi {
   }
 
   /**
-   * `PUT /api/v1/projects/{p}/kanban/boards/{b}/columns/{c}/cards/{card}/labels`
+   * `PUT /api/v1/projects/{p}/tasks/{t}/kanban/boards/{b}/columns/{c}/cards/{card}/labels`
    * — sync the set of labels on a card (api-doc §10.6). Returns 200 with
    * the updated {@link KanbanCard} including the new `labels` array. The
    * caller is responsible for committing the card to the store via
