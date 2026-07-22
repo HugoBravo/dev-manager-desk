@@ -42,7 +42,14 @@ const paginated = <T>(data: T[]) => ({
 
 const sampleBoard = (id: number, name: string) => ({
   id,
-  project_id: 7,
+  task_id: TASK_ID,
+  task: {
+    id: TASK_ID,
+    name: 'Ship S4',
+    slug: 'ship-s4',
+    status: 'open',
+    archived_at: null,
+  },
   name,
   position: 'n',
   archived_at: null,

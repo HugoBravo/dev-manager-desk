@@ -28,7 +28,14 @@ const TASK_ID = 9;
 
 const sampleBoard = () => ({
   id: 4,
-  project_id: 7,
+  task_id: TASK_ID,
+  task: {
+    id: TASK_ID,
+    name: 'Ship S4',
+    slug: 'ship-s4',
+    status: 'open',
+    archived_at: null,
+  },
   name: 'Sprint 42',
   position: 'n',
   archived_at: null,

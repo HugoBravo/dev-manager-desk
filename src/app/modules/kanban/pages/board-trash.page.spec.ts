@@ -23,7 +23,14 @@ const RESTORE_URL = (projectId: number, boardId: number) =>
 
 const sampleTrashedBoard = (id: number, name: string, deletedAt: string) => ({
   id,
-  project_id: 7,
+  task_id: TASK_ID,
+  task: {
+    id: TASK_ID,
+    name: 'Ship S4',
+    slug: 'ship-s4',
+    status: 'open',
+    archived_at: null,
+  },
   name,
   position: 'n',
   archived_at: null,
@@ -171,12 +178,19 @@ describe('BoardTrashPage', () => {
     expect(restoreReq.request.method).toBe('POST');
     restoreReq.flush({
       id: 1,
-      project_id: 7,
+      task_id: TASK_ID,
+      task: {
+        id: TASK_ID,
+        name: 'Ship S4',
+        slug: 'ship-s4',
+        status: 'open',
+        archived_at: null,
+      },
       name: 'Old Sprint',
       position: 'o',
       archived_at: null,
       created_at: '2026-01-01T00:00:00Z',
-      updated_at: '2026-01-10T10:00:00.000000Z',
+      updated_at: '2026-01-10T10:00:00Z',
       deleted_at: null,
     });
     fixture.detectChanges();

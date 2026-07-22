@@ -37,7 +37,14 @@ const sampleLabel = (id: number, name: string, color: string) => ({
 const sampleDetail: BoardDetail = {
   board: {
     id: 4,
-    project_id: 7,
+    task_id: TASK_ID,
+    task: {
+      id: TASK_ID,
+      name: 'Ship S4',
+      slug: 'ship-s4',
+      status: 'open',
+      archived_at: null,
+    },
     name: 'Sprint 42',
     position: 'n',
     archived_at: null,
@@ -108,7 +115,14 @@ describe('BoardsStore', () => {
     const promise = store.loadBoard(7, 4);
     httpMock.expectOne(`${FULL_PREFIX}/projects/7/tasks/9/kanban/boards/4`).flush({
       id: 4,
-      project_id: 7,
+      task_id: TASK_ID,
+      task: {
+        id: TASK_ID,
+        name: 'Ship S4',
+        slug: 'ship-s4',
+        status: 'open',
+        archived_at: null,
+      },
       name: 'Sprint 42',
       position: 'n',
       archived_at: null,
@@ -574,7 +588,14 @@ describe('BoardsStore', () => {
   /** Render a fresh `Board` with the given overrides. */
   const sampleBoardFn = (overrides: Partial<Board> = {}): Board => ({
     id: 99,
-    project_id: 7,
+    task_id: TASK_ID,
+    task: {
+      id: TASK_ID,
+      name: 'Ship S4',
+      slug: 'ship-s4',
+      status: 'open',
+      archived_at: null,
+    },
     name: 'New board',
     position: 'v',
     archived_at: null,
@@ -698,7 +719,14 @@ describe('BoardsStore', () => {
         data: [
           {
             id: 1,
-            project_id: 7,
+            task_id: TASK_ID,
+            task: {
+              id: TASK_ID,
+              name: 'Ship S4',
+              slug: 'ship-s4',
+              status: 'open',
+              archived_at: null,
+            },
             name: 'Trash A',
             position: 'n',
             archived_at: null,
@@ -708,7 +736,14 @@ describe('BoardsStore', () => {
           },
           {
             id: 2,
-            project_id: 7,
+            task_id: TASK_ID,
+            task: {
+              id: TASK_ID,
+              name: 'Ship S4',
+              slug: 'ship-s4',
+              status: 'open',
+              archived_at: null,
+            },
             name: 'Trash B',
             position: 'r',
             archived_at: null,

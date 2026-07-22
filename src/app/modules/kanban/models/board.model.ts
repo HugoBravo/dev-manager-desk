@@ -1,19 +1,35 @@
 /**
  * Wire shape of a Board resource (matches the backend contract documented in
- * `dev-manager-backend/docs/kanban-api.md` §3.2).
+ * `dev-manager-backend/docs/kanban-api.md` §3.2, updated for the
+ * kanban-per-task migration).
  *
- * Boards belong to a Project. Cross-project access collapses to a single
- * `notFound` at the error layer (see `ErrorNormalizer`).
+ * Boards belong to a Task — NOT directly to a Project (see
+ * `dev-manager-backend/docs/frontend-impact-kanban-per-task.md` §1). The
+ * wire shape carries the task id on the FK column AND embeds a
+ * lightweight `TaskSummary` so the UI can render the board header (and
+ * resolve the parent chain on 404 mismatch) without an extra round-trip.
  *
  * `deleted_at` is optional in the wire shape: the default active resource
  * omits it (or sets it to `null`), and the trash endpoint returns it as a
  * non-null ISO timestamp. The optional field keeps existing fixtures and
  * test samples backward-compatible — the store treats `null` and `undefined`
  * equivalently when sorting / filtering.
+ *
+ * Cross-owner access (board exists but under a different task) collapses
+ * to a single `notFound` at the error layer (see `ErrorNormalizer`).
  */
 export interface Board {
   readonly id: number;
-  readonly project_id: number;
+  /** FK to the owning `Task` (kanban-per-task — replaces `project_id`). */
+  readonly task_id: number;
+  /**
+   * Embedded parent task (lightweight summary). Lets the UI render the
+   * owning task name in the board header without a second API call.
+   * Always present on the wire — the backend's `BoardResource` defaults
+   * the relation to the full `TaskResource` so the frontend can pick
+   * which subset of fields to surface.
+   */
+  readonly task: import('../../../core/tasks/task.model').TaskSummary;
   readonly name: string;
   readonly position: string;
   readonly archived_at: string | null;

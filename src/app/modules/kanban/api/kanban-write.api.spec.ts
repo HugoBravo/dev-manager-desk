@@ -394,7 +394,14 @@ describe('KanbanWriteApi', () => {
   describe('board CRUD', () => {
     const sampleBoard = (id = 4) => ({
       id,
-      project_id: 7,
+      task_id: 9,
+      task: {
+        id: 9,
+        name: 'Ship S4',
+        slug: 'ship-s4',
+        status: 'open',
+        archived_at: null,
+      },
       name: `Board ${id}`,
       position: 'n',
       archived_at: null,
