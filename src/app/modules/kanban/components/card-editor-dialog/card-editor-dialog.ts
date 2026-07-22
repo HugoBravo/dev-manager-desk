@@ -257,6 +257,7 @@ export class CardEditorDialog implements OnInit {
             ? await firstValueFrom(
                 this.writeApi.createCard(
                   this.data.projectId,
+                  this.store.taskId,
                   this.data.boardId,
                   this.data.columnId,
                   {
@@ -269,6 +270,7 @@ export class CardEditorDialog implements OnInit {
             : await firstValueFrom(
                 this.writeApi.updateCard(
                   this.data.projectId,
+                  this.store.taskId,
                   this.data.boardId,
                   this.data.columnId,
                   this.data.card!.id,

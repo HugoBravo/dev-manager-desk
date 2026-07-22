@@ -15,10 +15,11 @@ import { BoardTrashPage } from './board-trash.page';
 const API_BASE_URL = 'http://localhost:8000/api';
 const API_PREFIX = '/v1';
 const FULL_PREFIX = `${API_BASE_URL}${API_PREFIX}`;
+const TASK_ID = 9;
 const TRASH_URL = (projectId: number) =>
-  `${FULL_PREFIX}/projects/${projectId}/kanban/boards/trashed`;
+  `${FULL_PREFIX}/projects/${projectId}/tasks/${TASK_ID}/kanban/boards/trashed`;
 const RESTORE_URL = (projectId: number, boardId: number) =>
-  `${FULL_PREFIX}/projects/${projectId}/kanban/boards/${boardId}/restore`;
+  `${FULL_PREFIX}/projects/${projectId}/tasks/${TASK_ID}/kanban/boards/${boardId}/restore`;
 
 const sampleTrashedBoard = (id: number, name: string, deletedAt: string) => ({
   id,
@@ -53,6 +54,8 @@ function createComponent(projectId = '7'): MountResult {
       ProjectService,
     ],
   });
+  // S1: bind the store to a taskId before the page's effect runs the load.
+  TestBed.inject(BoardsStore).setTaskId(TASK_ID);
   const fixture = TestBed.createComponent(BoardTrashPage);
   fixture.componentRef.setInput('projectId', projectId);
   fixture.detectChanges();

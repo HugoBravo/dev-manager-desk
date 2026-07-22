@@ -38,6 +38,42 @@ export class AttachmentsStore {
   private readonly _uploading = signal(false);
   private readonly _error = signal<ApiError | null>(null);
 
+  /**
+   * The currently-active task id. Set via {@link setTaskId} from the page
+   * that owns the route param (S2); cleared via {@link clearTaskId} on
+   * navigation away. Every URL-scoped API call reads this slot.
+   */
+  private _taskId: number | null = null;
+
+  /**
+   * Bind the store to a specific task. Called by the owning page on init
+   * and on route-param change.
+   */
+  setTaskId(taskId: number): void {
+    this._taskId = taskId;
+  }
+
+  /**
+   * Clear the task binding. Call this on route cleanup so a stale taskId
+   * doesn't leak into the next page's API calls.
+   */
+  clearTaskId(): void {
+    this._taskId = null;
+  }
+
+  /**
+   * Read-only access to the active task id. Throws if not set; use this in
+   * callers that need to forward the id to write APIs directly.
+   */
+  get taskId(): number {
+    if (this._taskId === null) {
+      throw new Error(
+        'AttachmentsStore: taskId is not set. Call setTaskId(taskId) before triggering API calls.',
+      );
+    }
+    return this._taskId;
+  }
+
   readonly attachments = this._attachments.asReadonly();
   readonly loading = this._loading.asReadonly();
   readonly uploading = this._uploading.asReadonly();
@@ -71,11 +107,12 @@ export class AttachmentsStore {
     columnId: number,
     cardId: number,
   ): Promise<void> {
+    const taskId = this.taskId;
     this._loading.set(true);
     this._error.set(null);
     try {
       const list = await firstValueFrom(
-        this.api.listAttachments(projectId, boardId, columnId, cardId),
+        this.api.listAttachments(projectId, taskId, boardId, columnId, cardId),
       );
       this._attachments.set(list);
     } catch (err) {
@@ -97,11 +134,12 @@ export class AttachmentsStore {
     cardId: number,
     file: File,
   ): Promise<KanbanAttachment> {
+    const taskId = this.taskId;
     this._uploading.set(true);
     this._error.set(null);
     try {
       const created = await firstValueFrom(
-        this.api.uploadAttachment(projectId, boardId, columnId, cardId, file),
+        this.api.uploadAttachment(projectId, taskId, boardId, columnId, cardId, file),
       );
       this._attachments.update((list) => [...list, created]);
       return created;
@@ -117,9 +155,11 @@ export class AttachmentsStore {
     cardId: number,
     attachmentId: number,
   ): Promise<void> {
+    const taskId = this.taskId;
     await firstValueFrom(
       this.api.deleteAttachment(
         projectId,
+        taskId,
         boardId,
         columnId,
         cardId,

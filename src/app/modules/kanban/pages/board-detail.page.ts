@@ -231,7 +231,7 @@ export class BoardDetailPage implements AfterViewInit {
       // via [cdkDropListData] in the template).
       const targetContainer = event.container.data as { columnId: number } | undefined;
       const targetColumnId = targetContainer?.columnId ?? card.column_id;
-      return this.writeApi.moveCard(projectIdNum, boardIdNum, card.column_id, card.id, {
+      return this.writeApi.moveCard(projectIdNum, this.store.taskId, boardIdNum, card.column_id, card.id, {
         to_column_id: targetColumnId,
       });
     },
@@ -416,7 +416,7 @@ export class BoardDetailPage implements AfterViewInit {
       return;
     }
     void this.safeColumnWrite(
-      this.writeApi.updateColumn(projectIdNum, boardIdNum, column.id, {
+      this.writeApi.updateColumn(projectIdNum, this.store.taskId, boardIdNum, column.id, {
         archived_at: new Date().toISOString(),
       }),
     ).then((updated) => {
@@ -436,7 +436,7 @@ export class BoardDetailPage implements AfterViewInit {
       return;
     }
     void this.safeColumnWrite(
-      this.writeApi.updateColumn(projectIdNum, boardIdNum, column.id, {
+      this.writeApi.updateColumn(projectIdNum, this.store.taskId, boardIdNum, column.id, {
         archived_at: null,
       }),
     ).then((updated) => {
@@ -466,7 +466,7 @@ export class BoardDetailPage implements AfterViewInit {
     if (!confirmed) {
       return;
     }
-    void firstValueFrom(this.writeApi.deleteColumn(projectIdNum, boardIdNum, column.id))
+    void firstValueFrom(this.writeApi.deleteColumn(projectIdNum, this.store.taskId, boardIdNum, column.id))
       .then(() => {
         this.store.applyColumnRemoved(column.id);
         this.snackBar.open('Deleted', 'Dismiss', { duration: 2000 });
@@ -505,7 +505,7 @@ export class BoardDetailPage implements AfterViewInit {
       return;
     }
     const created = await this.safeColumnWrite(
-      this.writeApi.createColumn(projectIdNum, boardIdNum, { name }),
+      this.writeApi.createColumn(projectIdNum, this.store.taskId, boardIdNum, { name }),
     );
     if (created !== null) {
       this.store.applyColumnCreated(created);
@@ -524,7 +524,7 @@ export class BoardDetailPage implements AfterViewInit {
       return;
     }
     const updated = await this.safeColumnWrite(
-      this.writeApi.updateColumn(projectIdNum, boardIdNum, column.id, { name }),
+      this.writeApi.updateColumn(projectIdNum, this.store.taskId, boardIdNum, column.id, { name }),
     );
     if (updated !== null) {
       this.store.applyColumnUpdated(updated);
@@ -651,7 +651,7 @@ export class BoardDetailPage implements AfterViewInit {
     }
     this.auditLoading.set(true);
     this.api
-      .listBoardAudit(projectIdNum, boardIdNum)
+      .listBoardAudit(projectIdNum, this.store.taskId, boardIdNum)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (entries) => {
@@ -671,7 +671,7 @@ export class BoardDetailPage implements AfterViewInit {
 
   private async renameBoard(projectIdNum: number, boardIdNum: number, name: string): Promise<void> {
     try {
-      await firstValueFrom(this.writeApi.updateBoard(projectIdNum, boardIdNum, { name }));
+      await firstValueFrom(this.writeApi.updateBoard(projectIdNum, this.store.taskId, boardIdNum, { name }));
       // Refetch the detail so the title shows the new name without a
       // race between the cached resource and the renamed one.
       await this.store.loadBoard(projectIdNum, boardIdNum);
@@ -687,7 +687,7 @@ export class BoardDetailPage implements AfterViewInit {
 
   private async deleteBoard(projectIdNum: number, boardIdNum: number, name: string): Promise<void> {
     try {
-      await firstValueFrom(this.writeApi.deleteBoard(projectIdNum, boardIdNum));
+      await firstValueFrom(this.writeApi.deleteBoard(projectIdNum, this.store.taskId, boardIdNum));
       this.snackBar.open(`Moved "${name}" to trash`, 'Dismiss', { duration: 2500 });
       void this.router.navigate(['/modules/kanban/projects', projectIdNum, 'boards']);
     } catch (err) {

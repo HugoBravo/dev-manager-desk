@@ -19,6 +19,7 @@ import { ErrorNormalizer } from '../../../../core/errors/error-normalizer';
 import type { ApiError } from '../../../../core/errors/api-error';
 import type { KanbanCard, KanbanLabel } from '../../models';
 import { LabelsStore } from '../../stores/labels.store';
+import { BoardsStore } from '../../stores/boards.store';
 import { KanbanWriteApi } from '../../api/kanban-write.api';
 import { LabelChip } from '../label-chip/label-chip';
 import {
@@ -148,6 +149,7 @@ export class CardLabelsPicker {
   readonly syncError = output<ApiError>();
 
   private readonly labelsStore = inject(LabelsStore);
+  private readonly boardsStore = inject(BoardsStore);
   private readonly writeApi = inject(KanbanWriteApi);
   private readonly dialog = inject(MatDialog);
   private readonly snackBar = inject(MatSnackBar);
@@ -302,6 +304,7 @@ export class CardLabelsPicker {
       const card = await firstValueFrom(
         this.writeApi.syncCardLabels(
           this.resolveProjectId(),
+          this.boardsStore.taskId,
           this.resolveBoardId(),
           this.resolveColumnId(),
           this.card().id,

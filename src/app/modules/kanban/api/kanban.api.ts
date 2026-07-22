@@ -18,8 +18,15 @@ import type {
 
 /**
  * Thin HttpClient wrapper around the kanban endpoints under
- * `/api/v1/projects/{project}/kanban/...`. Returns Observables; signal-backed
- * state lives in store classes.
+ * `/api/v1/projects/{project}/tasks/{task}/kanban/...`. Returns Observables;
+ * signal-backed state lives in store classes.
+ *
+ * ## URL contract (kanban-per-task)
+ *
+ * Every task-scoped read/write inserts `taskId` between `projectId` and the
+ * `kanban/...` segment. Global endpoints (`/kanban-labels`,
+ * `/boards/bulk-*`) remain unaffected — labels and bulk operations stay
+ * user-global per the proposal.
  *
  * ## Laravel pagination envelope
  *
@@ -49,12 +56,12 @@ export class KanbanApi {
   private readonly apiConfig = inject(API_CONFIG);
 
   /**
-   * `GET /api/v1/projects/{project}/kanban/boards?page=...` — paginated list of
-   * boards ordered by position ASC (api-doc §5.1). Unwraps the Laravel
-   * per-resource envelope; returns a flat `Board[]`.
+   * `GET /api/v1/projects/{p}/tasks/{t}/kanban/boards?page=...` — paginated
+   * list of boards ordered by position ASC (api-doc §5.1). Unwraps the
+   * Laravel per-resource envelope; returns a flat `Board[]`.
    */
-  listBoards(projectId: number, page = 1): Observable<Board[]> {
-    const url = `${this.baseUrl(projectId)}/kanban/boards`;
+  listBoards(projectId: number, taskId: number, page = 1): Observable<Board[]> {
+    const url = `${this.baseUrl(projectId, taskId)}/kanban/boards`;
     return this.http
       .get<unknown>(url, {
         params: page > 1 ? new HttpParams().set('page', String(page)) : new HttpParams(),
@@ -66,25 +73,31 @@ export class KanbanApi {
   }
 
   /**
-   * `GET /api/v1/projects/{project}/kanban/boards/{board}` — bare board
+   * `GET /api/v1/projects/{p}/tasks/{t}/kanban/boards/{board}` — bare board
    * (api-doc §5.3). Returns just the `Board` resource; the columns and
    * cards are fetched via the dedicated endpoints below.
    */
-  getBoard(projectId: number, boardId: number): Observable<Board> {
-    return this.http.get<unknown>(`${this.baseUrl(projectId)}/kanban/boards/${boardId}`).pipe(
-      map((raw) => unwrapLaravelItem<Board>(raw)),
-      catchError((err: unknown) => catchHttpError(err)),
-    );
+  getBoard(projectId: number, taskId: number, boardId: number): Observable<Board> {
+    return this.http
+      .get<unknown>(`${this.baseUrl(projectId, taskId)}/kanban/boards/${boardId}`)
+      .pipe(
+        map((raw) => unwrapLaravelItem<Board>(raw)),
+        catchError((err: unknown) => catchHttpError(err)),
+      );
   }
 
   /**
-   * `GET /api/v1/projects/{project}/kanban/boards/{board}/columns` — bare
-   * columns for a board (api-doc §6.1), ordered by position ASC. Unwraps the
-   * Laravel per-resource envelope.
+   * `GET /api/v1/projects/{p}/tasks/{t}/kanban/boards/{board}/columns` —
+   * bare columns for a board (api-doc §6.1), ordered by position ASC.
+   * Unwraps the Laravel per-resource envelope.
    */
-  listColumns(projectId: number, boardId: number): Observable<KanbanColumn[]> {
+  listColumns(
+    projectId: number,
+    taskId: number,
+    boardId: number,
+  ): Observable<KanbanColumn[]> {
     return this.http
-      .get<unknown>(`${this.baseUrl(projectId)}/kanban/boards/${boardId}/columns`)
+      .get<unknown>(`${this.baseUrl(projectId, taskId)}/kanban/boards/${boardId}/columns`)
       .pipe(
         map((raw) => unwrapLaravelItems<KanbanColumn>(raw)),
         catchError((err: unknown) => catchHttpError(err)),
@@ -92,8 +105,8 @@ export class KanbanApi {
   }
 
   /**
-   * `GET /api/v1/projects/{project}/kanban/boards/{board}/columns/{column}` —
-   * bare single column (api-doc §6.3). Returns the {@link KanbanColumn}
+   * `GET /api/v1/projects/{p}/tasks/{t}/kanban/boards/{board}/columns/{column}`
+   * — bare single column (api-doc §6.3). Returns the {@link KanbanColumn}
    * resource with the canonical `archived_at` and `position`. Unwraps
    * the Laravel per-resource envelope.
    *
@@ -101,9 +114,16 @@ export class KanbanApi {
    * `archived_at` changed) when the caller wants to avoid refetching
    * the whole `getBoardDetail` payload.
    */
-  getColumn(projectId: number, boardId: number, columnId: number): Observable<KanbanColumn> {
+  getColumn(
+    projectId: number,
+    taskId: number,
+    boardId: number,
+    columnId: number,
+  ): Observable<KanbanColumn> {
     return this.http
-      .get<unknown>(`${this.baseUrl(projectId)}/kanban/boards/${boardId}/columns/${columnId}`)
+      .get<unknown>(
+        `${this.baseUrl(projectId, taskId)}/kanban/boards/${boardId}/columns/${columnId}`,
+      )
       .pipe(
         map((raw) => unwrapLaravelItem<KanbanColumn>(raw)),
         catchError((err: unknown) => catchHttpError(err)),
@@ -111,13 +131,20 @@ export class KanbanApi {
   }
 
   /**
-   * `GET /api/v1/projects/{project}/kanban/boards/{board}/columns/{column}/cards`
+   * `GET /api/v1/projects/{p}/tasks/{t}/kanban/boards/{board}/columns/{column}/cards`
    * — bare cards in a column (api-doc §7.1), ordered by position ASC.
    * Unwraps the Laravel per-resource envelope.
    */
-  listCards(projectId: number, boardId: number, columnId: number): Observable<KanbanCard[]> {
+  listCards(
+    projectId: number,
+    taskId: number,
+    boardId: number,
+    columnId: number,
+  ): Observable<KanbanCard[]> {
     return this.http
-      .get<unknown>(`${this.baseUrl(projectId)}/kanban/boards/${boardId}/columns/${columnId}/cards`)
+      .get<unknown>(
+        `${this.baseUrl(projectId, taskId)}/kanban/boards/${boardId}/columns/${columnId}/cards`,
+      )
       .pipe(
         map((raw) => unwrapLaravelItems<KanbanCard>(raw)),
         catchError((err: unknown) => catchHttpError(err)),
@@ -134,9 +161,13 @@ export class KanbanApi {
    * back to an empty list for that column — column-level failures are not
    * fatal in the read-only viewer.
    */
-  getBoardDetail(projectId: number, boardId: number): Observable<BoardDetail> {
-    const board$ = this.getBoard(projectId, boardId);
-    const columns$ = this.listColumns(projectId, boardId);
+  getBoardDetail(
+    projectId: number,
+    taskId: number,
+    boardId: number,
+  ): Observable<BoardDetail> {
+    const board$ = this.getBoard(projectId, taskId, boardId);
+    const columns$ = this.listColumns(projectId, taskId, boardId);
 
     return forkJoin({ board: board$, columns: columns$ }).pipe(
       switchMap(({ board, columns }) => {
@@ -145,7 +176,7 @@ export class KanbanApi {
         }
         return forkJoin(
           columns.map((column) =>
-            this.listCards(projectId, boardId, column.id).pipe(
+            this.listCards(projectId, taskId, boardId, column.id).pipe(
               map((cards) => ({ columnId: column.id, cards })),
               catchError(
                 () =>
@@ -207,16 +238,16 @@ export class KanbanApi {
   }
 
   /**
-   * `GET /api/v1/projects/{project}/kanban/boards/trashed?page=...` —
-   * soft-deleted boards for a project (api-doc §16 trash), newest-deleted
+   * `GET /api/v1/projects/{p}/tasks/{t}/kanban/boards/trashed?page=...` —
+   * soft-deleted boards for a task (api-doc §16 trash), newest-deleted
    * first. Unwraps the Laravel paginator envelope; returns a flat
    * {@link Board} array where every entry has a non-null `deleted_at`.
    *
    * Used by the trash page; the active boards list endpoint excludes
    * these by default. Cross-owner returns 404 (collapsed to `notFound`).
    */
-  listTrashedBoards(projectId: number, page = 1): Observable<Board[]> {
-    const url = `${this.baseUrl(projectId)}/kanban/boards/trashed`;
+  listTrashedBoards(projectId: number, taskId: number, page = 1): Observable<Board[]> {
+    const url = `${this.baseUrl(projectId, taskId)}/kanban/boards/trashed`;
     return this.http
       .get<unknown>(url, {
         params: page > 1 ? new HttpParams().set('page', String(page)) : new HttpParams(),
@@ -228,7 +259,7 @@ export class KanbanApi {
   }
 
   /**
-   * `GET /api/v1/projects/{project}/kanban/boards/{board}/audit?page=...`
+   * `GET /api/v1/projects/{p}/tasks/{t}/kanban/boards/{board}/audit?page=...`
    * — paginated audit log for a board (api-doc §19), newest-first, page
    * size 25. Returns a flat {@link BoardAuditLog} array (unwraps the
    * Laravel per-row envelope).
@@ -239,10 +270,11 @@ export class KanbanApi {
    */
   listBoardAudit(
     projectId: number,
+    taskId: number,
     boardId: number,
     page = 1,
   ): Observable<readonly BoardAuditLog[]> {
-    const url = `${this.baseUrl(projectId)}/kanban/boards/${boardId}/audit`;
+    const url = `${this.baseUrl(projectId, taskId)}/kanban/boards/${boardId}/audit`;
     return this.http
       .get<unknown>(url, {
         params: page > 1 ? new HttpParams().set('page', String(page)) : new HttpParams(),
@@ -253,12 +285,22 @@ export class KanbanApi {
       );
   }
 
-  private baseUrl(projectId?: number): string {
+  private baseUrl(projectId?: number, taskId?: number): string {
     const prefix = `${this.apiConfig.apiBaseUrl}/v1`;
     if (projectId === undefined) {
+      // Global endpoints (labels) — no project/task scope.
       return `${prefix}`;
     }
-    return `${prefix}/projects/${projectId}`;
+    if (taskId === undefined) {
+      // Misuse guard: a project-scoped kanban URL without a taskId is no
+      // longer supported under the kanban-per-task contract. Surfacing this
+      // here (instead of silently building a legacy URL) means a missing
+      // `setTaskId()` in a store fails fast in tests.
+      throw new Error(
+        'KanbanApi.baseUrl: taskId is required when projectId is provided (kanban-per-task contract).',
+      );
+    }
+    return `${prefix}/projects/${projectId}/tasks/${taskId}`;
   }
 }
 

@@ -10,8 +10,8 @@ import { AttachmentsApi } from './attachments.api';
 
 const API_BASE_URL = 'http://localhost:8000/api';
 const FULL_PREFIX = `${API_BASE_URL}/v1`;
-const attachmentsBase = (p: number, b: number, c: number, card: number) =>
-  `${FULL_PREFIX}/projects/${p}/kanban/boards/${b}/columns/${c}/cards/${card}/attachments`;
+const attachmentsBase = (p: number, t: number, b: number, c: number, card: number) =>
+  `${FULL_PREFIX}/projects/${p}/tasks/${t}/kanban/boards/${b}/columns/${c}/cards/${card}/attachments`;
 
 function firstValueFrom<T>(source: import('rxjs').Observable<T>): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -45,9 +45,9 @@ describe('AttachmentsApi', () => {
 
   afterEach(() => httpMock.verify());
 
-  it('listAttachments GETs and unwraps data', async () => {
-    const promise = firstValueFrom(api.listAttachments(7, 4, 12, 87));
-    const req = httpMock.expectOne(attachmentsBase(7, 4, 12, 87));
+  it('listAttachments GETs and unwraps data (task-scoped URL chain)', async () => {
+    const promise = firstValueFrom(api.listAttachments(7, 9, 4, 12, 87));
+    const req = httpMock.expectOne(attachmentsBase(7, 9, 4, 12, 87));
     expect(req.request.method).toBe('GET');
     req.flush({
       data: [
@@ -74,10 +74,10 @@ describe('AttachmentsApi', () => {
     expect(list[0]?.url).toBeNull();
   });
 
-  it('uploadAttachment POSTs multipart/form-data with the file', async () => {
+  it('uploadAttachment POSTs multipart/form-data with the file (task-scoped URL chain)', async () => {
     const file = buildFile('photo.png', 'image/png', 16);
-    const promise = firstValueFrom(api.uploadAttachment(7, 4, 12, 87, file));
-    const req = httpMock.expectOne(attachmentsBase(7, 4, 12, 87));
+    const promise = firstValueFrom(api.uploadAttachment(7, 9, 4, 12, 87, file));
+    const req = httpMock.expectOne(attachmentsBase(7, 9, 4, 12, 87));
     expect(req.request.method).toBe('POST');
     expect(req.request.body instanceof FormData).toBe(true);
     const form = req.request.body as FormData;
@@ -99,9 +99,9 @@ describe('AttachmentsApi', () => {
     expect(created.original_filename).toBe('photo.png');
   });
 
-  it('deleteAttachment DELETEs by id', async () => {
-    const promise = firstValueFrom(api.deleteAttachment(7, 4, 12, 87, 42));
-    const req = httpMock.expectOne(`${attachmentsBase(7, 4, 12, 87)}/42`);
+  it('deleteAttachment DELETEs by id under the task-scoped URL chain', async () => {
+    const promise = firstValueFrom(api.deleteAttachment(7, 9, 4, 12, 87, 42));
+    const req = httpMock.expectOne(`${attachmentsBase(7, 9, 4, 12, 87)}/42`);
     expect(req.request.method).toBe('DELETE');
     req.flush(null, { status: 204, statusText: 'No Content' });
     await promise;
@@ -109,8 +109,8 @@ describe('AttachmentsApi', () => {
 
   it('422 attachment_mime_blocked surfaces as validation + typed code', async () => {
     const file = buildFile('photo.exe', 'application/octet-stream', 16);
-    const promise = firstValueFrom(api.uploadAttachment(7, 4, 12, 87, file));
-    const req = httpMock.expectOne(attachmentsBase(7, 4, 12, 87));
+    const promise = firstValueFrom(api.uploadAttachment(7, 9, 4, 12, 87, file));
+    const req = httpMock.expectOne(attachmentsBase(7, 9, 4, 12, 87));
     req.flush(
       {
         message: 'Attachment mime is not allowed.',

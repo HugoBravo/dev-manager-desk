@@ -108,7 +108,7 @@ export class BoardTrashPage {
     }
     this.markRestoring(board.id, true);
     try {
-      const restored = await firstValueFrom(this.writeApi.restoreBoard(projectId, board.id));
+      const restored = await firstValueFrom(this.writeApi.restoreBoard(projectId, this.store.taskId, board.id));
       this.store.applyBoardRestored(restored);
       // Drop the row from the trash view. The store's trash signal
       // is the source of truth for the rendered list — removing it

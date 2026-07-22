@@ -30,8 +30,9 @@ import {
 const API_BASE_URL = 'http://localhost:8000/api';
 const API_PREFIX = '/v1';
 const FULL_PREFIX = `${API_BASE_URL}${API_PREFIX}`;
+const TASK_ID = 9;
 const cardsBase = (p: number, b: number, c: number) =>
-  `${FULL_PREFIX}/projects/${p}/kanban/boards/${b}/columns/${c}/cards`;
+  `${FULL_PREFIX}/projects/${p}/tasks/${TASK_ID}/kanban/boards/${b}/columns/${c}/cards`;
 
 const sampleCard = (overrides: Partial<KanbanCard> = {}): KanbanCard => ({
   id: 87,
@@ -101,6 +102,11 @@ function mountDialog(opts: { archived?: boolean } = {}) {
   const labelsStore = TestBed.inject(LabelsStore);
   labelsStore.labelsCache.set([]);
   labelsStore.__markLoadedForTests();
+  // S1: bind every store the dialog uses to a taskId before ngOnInit fires
+  // the comments/attachments loads.
+  TestBed.inject(BoardsStore).setTaskId(TASK_ID);
+  TestBed.inject(CommentsStore).setTaskId(TASK_ID);
+  TestBed.inject(AttachmentsStore).setTaskId(TASK_ID);
   fixture.detectChanges();
 
   return {
@@ -155,7 +161,7 @@ describe('CardDetailDialog', () => {
   }
 
   function baseUrl(): string {
-    return `${FULL_PREFIX}/projects/7/kanban/boards/4/columns/12/cards/87`;
+    return `${FULL_PREFIX}/projects/7/tasks/${TASK_ID}/kanban/boards/4/columns/12/cards/87`;
   }
 
   it('focuses the h2 title on open (a11y: WCAG focus management)', async () => {

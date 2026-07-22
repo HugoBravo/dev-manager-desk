@@ -726,6 +726,7 @@ export class CardDetailDialog implements OnInit {
       const updated = await firstValueFrom(
         this.writeApi.archiveCard(
           this.data.projectId,
+          this.store.taskId,
           this.data.boardId,
           this.data.columnId,
           this.data.card.id,
@@ -743,6 +744,7 @@ export class CardDetailDialog implements OnInit {
       const updated = await firstValueFrom(
         this.writeApi.restoreCard(
           this.data.projectId,
+          this.store.taskId,
           this.data.boardId,
           this.data.columnId,
           this.data.card.id,
@@ -760,6 +762,7 @@ export class CardDetailDialog implements OnInit {
       await firstValueFrom(
         this.writeApi.deleteCard(
           this.data.projectId,
+          this.store.taskId,
           this.data.boardId,
           this.data.columnId,
           this.data.card.id,

@@ -139,7 +139,7 @@ export class BoardsListPage {
     this.loading.set(true);
     this.error.set(null);
     this.api
-      .listBoards(projectId)
+      .listBoards(projectId, this.store.taskId)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (boards) => {
@@ -258,7 +258,7 @@ export class BoardsListPage {
 
   private async createBoard(projectIdNum: number, name: string): Promise<void> {
     try {
-      const created = await firstValueFrom(this.writeApi.createBoard(projectIdNum, { name }));
+      const created = await firstValueFrom(this.writeApi.createBoard(projectIdNum, this.store.taskId, { name }));
       this.store.applyBoardCreated(created);
       this.snackBar.open(`Created board "${created.name}"`, 'Dismiss', {
         duration: 2500,
@@ -274,7 +274,7 @@ export class BoardsListPage {
   private async renameBoard(projectIdNum: number, board: Board, name: string): Promise<void> {
     try {
       const updated = await firstValueFrom(
-        this.writeApi.updateBoard(projectIdNum, board.id, { name }),
+        this.writeApi.updateBoard(projectIdNum, this.store.taskId, board.id, { name }),
       );
       this.store.applyBoardUpdated(updated);
       this.snackBar.open(`Renamed to "${updated.name}"`, 'Dismiss', {
@@ -299,7 +299,7 @@ export class BoardsListPage {
 
   private async deleteBoard(projectIdNum: number, board: Board): Promise<void> {
     try {
-      await firstValueFrom(this.writeApi.deleteBoard(projectIdNum, board.id));
+      await firstValueFrom(this.writeApi.deleteBoard(projectIdNum, this.store.taskId, board.id));
       this.store.applyBoardRemoved(board.id);
       // Also drop the id from the selection so a stale entry can't end up
       // in a subsequent bulk request.

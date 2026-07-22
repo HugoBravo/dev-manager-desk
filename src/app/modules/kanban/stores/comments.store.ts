@@ -44,6 +44,42 @@ export class CommentsStore {
   /** Updates every 30s so `canEdit()` recomputes as the window closes. */
   private readonly _tick = signal(Date.now());
 
+  /**
+   * The currently-active task id. Set via {@link setTaskId} from the page
+   * that owns the route param (S2); cleared via {@link clearTaskId} on
+   * navigation away. Every URL-scoped API call reads this slot.
+   */
+  private _taskId: number | null = null;
+
+  /**
+   * Bind the store to a specific task. Called by the owning page on init
+   * and on route-param change.
+   */
+  setTaskId(taskId: number): void {
+    this._taskId = taskId;
+  }
+
+  /**
+   * Clear the task binding. Call this on route cleanup so a stale taskId
+   * doesn't leak into the next page's API calls.
+   */
+  clearTaskId(): void {
+    this._taskId = null;
+  }
+
+  /**
+   * Read-only access to the active task id. Throws if not set; use this in
+   * callers that need to forward the id to write APIs directly.
+   */
+  get taskId(): number {
+    if (this._taskId === null) {
+      throw new Error(
+        'CommentsStore: taskId is not set. Call setTaskId(taskId) before triggering API calls.',
+      );
+    }
+    return this._taskId;
+  }
+
   readonly comments = this._comments.asReadonly();
   readonly loading = this._loading.asReadonly();
   readonly error = this._error.asReadonly();
@@ -102,11 +138,12 @@ export class CommentsStore {
     columnId: number,
     cardId: number,
   ): Promise<void> {
+    const taskId = this.taskId;
     this._loading.set(true);
     this._error.set(null);
     try {
       const list = await firstValueFrom(
-        this.api.listComments(projectId, boardId, columnId, cardId),
+        this.api.listComments(projectId, taskId, boardId, columnId, cardId),
       );
       this._comments.set(list);
     } catch (err) {
@@ -123,8 +160,9 @@ export class CommentsStore {
     cardId: number,
     body: CommentBodyRequest,
   ): Promise<KanbanComment> {
+    const taskId = this.taskId;
     const created = await firstValueFrom(
-      this.api.createComment(projectId, boardId, columnId, cardId, body),
+      this.api.createComment(projectId, taskId, boardId, columnId, cardId, body),
     );
     this._comments.update((list) => [...list, created]);
     return created;
@@ -138,9 +176,11 @@ export class CommentsStore {
     commentId: number,
     body: CommentBodyRequest,
   ): Promise<KanbanComment> {
+    const taskId = this.taskId;
     const updated = await firstValueFrom(
       this.api.updateComment(
         projectId,
+        taskId,
         boardId,
         columnId,
         cardId,
@@ -161,8 +201,9 @@ export class CommentsStore {
     cardId: number,
     commentId: number,
   ): Promise<void> {
+    const taskId = this.taskId;
     await firstValueFrom(
-      this.api.deleteComment(projectId, boardId, columnId, cardId, commentId),
+      this.api.deleteComment(projectId, taskId, boardId, columnId, cardId, commentId),
     );
     this._comments.update((list) => list.filter((c) => c.id !== commentId));
   }

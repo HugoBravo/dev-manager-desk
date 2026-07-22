@@ -98,91 +98,115 @@ describe('KanbanApi', () => {
   afterEach(() => httpMock.verify());
 
   describe('listBoards()', () => {
-    it('GETs /projects/{id}/kanban/boards with no page param on the first page', async () => {
-      const promise = api.listBoards(7).toPromise();
+    it('GETs /projects/{p}/tasks/{t}/kanban/boards with no page param on the first page', async () => {
+      const promise = api.listBoards(7, 9).toPromise();
       const req = httpMock.expectOne(
-        (r) => r.method === 'GET' && r.url === `${FULL_PREFIX}/projects/7/kanban/boards`,
+        (r) =>
+          r.method === 'GET' && r.url === `${FULL_PREFIX}/projects/7/tasks/9/kanban/boards`,
       );
       expect(req.request.params.has('page')).toBe(false);
       req.flush(paginated([sampleBoard()]));
       await expect(promise).resolves.toEqual([sampleBoard()]);
     });
 
-    it('appends ?page=N when page > 1', async () => {
-      const promise = api.listBoards(7, 3).toPromise();
-      const req = httpMock.expectOne((r) => r.params.get('page') === '3');
+    it('appends ?page=N when page > 1 (taskId threads into the URL chain)', async () => {
+      const promise = api.listBoards(7, 9, 3).toPromise();
+      const req = httpMock.expectOne(
+        (r) =>
+          r.params.get('page') === '3' && r.url === `${FULL_PREFIX}/projects/7/tasks/9/kanban/boards`,
+      );
       req.flush(paginated([]));
       await expect(promise).resolves.toEqual([]);
     });
 
     it('routes errors through catchHttpError (W3 enforcement)', async () => {
-      const promise = api.listBoards(7).toPromise();
+      const promise = api.listBoards(7, 9).toPromise();
       httpMock
-        .expectOne(`${FULL_PREFIX}/projects/7/kanban/boards`)
+        .expectOne(`${FULL_PREFIX}/projects/7/tasks/9/kanban/boards`)
         .flush({ message: 'Not found' }, { status: 404, statusText: 'Not Found' });
       await expect(promise).rejects.toMatchObject({ kind: 'notFound' });
     });
   });
 
   describe('getBoard()', () => {
-    it('GETs /projects/{id}/kanban/boards/{board} and unwraps the resource envelope', async () => {
-      const promise = api.getBoard(7, 4).toPromise();
+    it('GETs /projects/{p}/tasks/{t}/kanban/boards/{board} and unwraps the resource envelope', async () => {
+      const promise = api.getBoard(7, 9, 4).toPromise();
       httpMock
-        .expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4`)
+        .expectOne(`${FULL_PREFIX}/projects/7/tasks/9/kanban/boards/4`)
         .flush({ data: sampleBoard() });
       await expect(promise).resolves.toEqual(sampleBoard());
     });
 
     it('surfaces 404 through the normalizer', async () => {
-      const promise = api.getBoard(7, 4).toPromise();
+      const promise = api.getBoard(7, 9, 4).toPromise();
       httpMock
-        .expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4`)
+        .expectOne(`${FULL_PREFIX}/projects/7/tasks/9/kanban/boards/4`)
         .flush({ message: 'gone' }, { status: 404, statusText: 'Not Found' });
       await expect(promise).rejects.toMatchObject({ kind: 'notFound' });
     });
   });
 
   describe('listColumns() and listCards()', () => {
-    it('listColumns GETs /columns and unwraps the envelope', async () => {
-      const promise = api.listColumns(7, 4).toPromise();
+    it('listColumns GETs /columns under the task-scoped URL chain', async () => {
+      const promise = api.listColumns(7, 9, 4).toPromise();
       httpMock
-        .expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4/columns`)
+        .expectOne(`${FULL_PREFIX}/projects/7/tasks/9/kanban/boards/4/columns`)
         .flush(paginated([sampleColumn(12)]));
       await expect(promise).resolves.toEqual([sampleColumn(12)]);
     });
 
-    it('listCards GETs /columns/{id}/cards and unwraps the envelope', async () => {
-      const promise = api.listCards(7, 4, 12).toPromise();
+    it('listCards GETs /columns/{id}/cards under the task-scoped URL chain', async () => {
+      const promise = api.listCards(7, 9, 4, 12).toPromise();
       httpMock
-        .expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4/columns/12/cards`)
+        .expectOne(`${FULL_PREFIX}/projects/7/tasks/9/kanban/boards/4/columns/12/cards`)
         .flush(paginated([sampleCard(87, 12)]));
       await expect(promise).resolves.toEqual([sampleCard(87, 12)]);
     });
 
     it('listColumns routes 404 through the normalizer', async () => {
-      const promise = api.listColumns(7, 4).toPromise();
+      const promise = api.listColumns(7, 9, 4).toPromise();
       httpMock
-        .expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4/columns`)
+        .expectOne(`${FULL_PREFIX}/projects/7/tasks/9/kanban/boards/4/columns`)
+        .flush({ message: 'gone' }, { status: 404, statusText: 'Not Found' });
+      await expect(promise).rejects.toMatchObject({ kind: 'notFound' });
+    });
+  });
+
+  describe('getColumn()', () => {
+    it('GETs /columns/{c} under the task-scoped URL chain', async () => {
+      const promise = api.getColumn(7, 9, 4, 12).toPromise();
+      httpMock
+        .expectOne(`${FULL_PREFIX}/projects/7/tasks/9/kanban/boards/4/columns/12`)
+        .flush({ data: sampleColumn(12) });
+      await expect(promise).resolves.toEqual(sampleColumn(12));
+    });
+
+    it('surfaces 404 through the normalizer', async () => {
+      const promise = api.getColumn(7, 9, 4, 12).toPromise();
+      httpMock
+        .expectOne(`${FULL_PREFIX}/projects/7/tasks/9/kanban/boards/4/columns/12`)
         .flush({ message: 'gone' }, { status: 404, statusText: 'Not Found' });
       await expect(promise).rejects.toMatchObject({ kind: 'notFound' });
     });
   });
 
   describe('getBoardDetail()', () => {
-    it('composes board + columns + cards into one BoardDetail', async () => {
-      const promise = api.getBoardDetail(7, 4).toPromise();
-      httpMock.expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4`).flush(sampleBoard());
+    it('composes board + columns + cards into one BoardDetail under the task-scoped URL chain', async () => {
+      const promise = api.getBoardDetail(7, 9, 4).toPromise();
+      httpMock
+        .expectOne(`${FULL_PREFIX}/projects/7/tasks/9/kanban/boards/4`)
+        .flush(sampleBoard());
 
       httpMock
-        .expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4/columns`)
+        .expectOne(`${FULL_PREFIX}/projects/7/tasks/9/kanban/boards/4/columns`)
         .flush(paginated([sampleColumn(12), sampleColumn(13)]));
 
       httpMock
-        .expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4/columns/12/cards`)
+        .expectOne(`${FULL_PREFIX}/projects/7/tasks/9/kanban/boards/4/columns/12/cards`)
         .flush(paginated([sampleCard(87, 12)]));
 
       httpMock
-        .expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4/columns/13/cards`)
+        .expectOne(`${FULL_PREFIX}/projects/7/tasks/9/kanban/boards/4/columns/13/cards`)
         .flush(paginated([]));
 
       const result = await promise;
@@ -198,31 +222,33 @@ describe('KanbanApi', () => {
       // acknowledge both — `expectOne` removes the request from the verify()
       // check without trying to flush a cancelled request.
       const errorPromise = new Promise<unknown>((resolve, reject) => {
-        api.getBoardDetail(7, 4).subscribe({
+        api.getBoardDetail(7, 9, 4).subscribe({
           next: () => reject(new Error('expected error, got next')),
           error: (err) => resolve(err),
         });
       });
 
       httpMock
-        .expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4`)
+        .expectOne(`${FULL_PREFIX}/projects/7/tasks/9/kanban/boards/4`)
         .flush({ message: 'gone' }, { status: 404, statusText: 'Not Found' });
       // Mark the sibling columns request as observed so verify() passes;
       // the request was cancelled by forkJoin so we cannot flush it.
-      httpMock.expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4/columns`);
+      httpMock.expectOne(`${FULL_PREFIX}/projects/7/tasks/9/kanban/boards/4/columns`);
 
       const captured = await errorPromise;
       expect(captured).toMatchObject({ kind: 'notFound' });
     });
 
     it('tolerates a column having no cards (empty list)', async () => {
-      const promise = api.getBoardDetail(7, 4).toPromise();
-      httpMock.expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4`).flush(sampleBoard());
+      const promise = api.getBoardDetail(7, 9, 4).toPromise();
       httpMock
-        .expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4/columns`)
+        .expectOne(`${FULL_PREFIX}/projects/7/tasks/9/kanban/boards/4`)
+        .flush(sampleBoard());
+      httpMock
+        .expectOne(`${FULL_PREFIX}/projects/7/tasks/9/kanban/boards/4/columns`)
         .flush(paginated([sampleColumn(12)]));
       httpMock
-        .expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4/columns/12/cards`)
+        .expectOne(`${FULL_PREFIX}/projects/7/tasks/9/kanban/boards/4/columns/12/cards`)
         .flush(paginated([]));
       const result = await promise;
       expect(result?.cardsByColumnId['12']).toEqual([]);
@@ -277,10 +303,12 @@ describe('KanbanApi', () => {
   });
 
   describe('listTrashedBoards()', () => {
-    it('GETs /projects/{id}/kanban/boards/trashed with no page param on the first page', async () => {
-      const promise = api.listTrashedBoards(7).toPromise();
+    it('GETs /projects/{p}/tasks/{t}/kanban/boards/trashed with no page param on the first page', async () => {
+      const promise = api.listTrashedBoards(7, 9).toPromise();
       const req = httpMock.expectOne(
-        (r) => r.method === 'GET' && r.url === `${FULL_PREFIX}/projects/7/kanban/boards/trashed`,
+        (r) =>
+          r.method === 'GET' &&
+          r.url === `${FULL_PREFIX}/projects/7/tasks/9/kanban/boards/trashed`,
       );
       expect(req.request.params.has('page')).toBe(false);
       req.flush(paginated([{ ...sampleBoard(), deleted_at: '2026-07-10T15:00:00Z' }]));
@@ -289,37 +317,39 @@ describe('KanbanApi', () => {
       ]);
     });
 
-    it('appends ?page=N when page > 1', async () => {
-      const promise = api.listTrashedBoards(7, 3).toPromise();
+    it('appends ?page=N when page > 1 (taskId threads into the URL chain)', async () => {
+      const promise = api.listTrashedBoards(7, 9, 3).toPromise();
       const req = httpMock.expectOne(
-        (r) => r.params.get('page') === '3' && r.url.endsWith('/boards/trashed'),
+        (r) =>
+          r.params.get('page') === '3' &&
+          r.url === `${FULL_PREFIX}/projects/7/tasks/9/kanban/boards/trashed`,
       );
       req.flush(paginated([]));
       await expect(promise).resolves.toEqual([]);
     });
 
     it('routes 401 unauth through the normalizer', async () => {
-      const promise = api.listTrashedBoards(7).toPromise();
+      const promise = api.listTrashedBoards(7, 9).toPromise();
       httpMock
-        .expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/trashed`)
+        .expectOne(`${FULL_PREFIX}/projects/7/tasks/9/kanban/boards/trashed`)
         .flush({ message: 'Unauthenticated.' }, { status: 401, statusText: 'Unauthorized' });
       await expect(promise).rejects.toMatchObject({ kind: 'unauthorized' });
     });
 
     it('routes 404 cross-owner through the normalizer', async () => {
-      const promise = api.listTrashedBoards(7).toPromise();
+      const promise = api.listTrashedBoards(7, 9).toPromise();
       httpMock
-        .expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/trashed`)
+        .expectOne(`${FULL_PREFIX}/projects/7/tasks/9/kanban/boards/trashed`)
         .flush({ message: 'gone' }, { status: 404, statusText: 'Not Found' });
       await expect(promise).rejects.toMatchObject({ kind: 'notFound' });
     });
   });
 
   describe('listBoardAudit()', () => {
-    it('GETs /boards/{id}/audit and unwraps the paginated envelope', async () => {
-      const promise = api.listBoardAudit(7, 4).toPromise();
+    it('GETs /boards/{id}/audit under the task-scoped URL chain', async () => {
+      const promise = api.listBoardAudit(7, 9, 4).toPromise();
       const req = httpMock.expectOne(
-        (r) => r.url === `${FULL_PREFIX}/projects/7/kanban/boards/4/audit`,
+        (r) => r.url === `${FULL_PREFIX}/projects/7/tasks/9/kanban/boards/4/audit`,
       );
       expect(req.request.method).toBe('GET');
       expect(req.request.params.has('page')).toBe(false);
@@ -358,17 +388,17 @@ describe('KanbanApi', () => {
     });
 
     it('routes 401 unauth through the normalizer', async () => {
-      const promise = api.listBoardAudit(7, 4).toPromise();
+      const promise = api.listBoardAudit(7, 9, 4).toPromise();
       httpMock
-        .expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4/audit`)
+        .expectOne(`${FULL_PREFIX}/projects/7/tasks/9/kanban/boards/4/audit`)
         .flush({ message: 'Unauthenticated.' }, { status: 401, statusText: 'Unauthorized' });
       await expect(promise).rejects.toMatchObject({ kind: 'unauthorized' });
     });
 
     it('routes 404 cross-owner through the normalizer', async () => {
-      const promise = api.listBoardAudit(7, 4).toPromise();
+      const promise = api.listBoardAudit(7, 9, 4).toPromise();
       httpMock
-        .expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4/audit`)
+        .expectOne(`${FULL_PREFIX}/projects/7/tasks/9/kanban/boards/4/audit`)
         .flush({ message: 'gone' }, { status: 404, statusText: 'Not Found' });
       await expect(promise).rejects.toMatchObject({ kind: 'notFound' });
     });

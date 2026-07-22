@@ -22,7 +22,9 @@ import { BoardEditorDialog } from '../components/board-editor-dialog/board-edito
 const API_BASE_URL = 'http://localhost:8000/api';
 const API_PREFIX = '/v1';
 const FULL_PREFIX = `${API_BASE_URL}${API_PREFIX}`;
-const BOARDS_URL = (projectId: number) => `${FULL_PREFIX}/projects/${projectId}/kanban/boards`;
+const TASK_ID = 9;
+const BOARDS_URL = (projectId: number) =>
+  `${FULL_PREFIX}/projects/${projectId}/tasks/${TASK_ID}/kanban/boards`;
 
 const paginated = <T>(data: T[]) => ({
   data,
@@ -83,6 +85,8 @@ describe('BoardsListPage', () => {
     }).compileComponents();
     // Silence snackbar dialogs in tests.
     TestBed.inject(MatSnackBar);
+    // S1: bind the store to a taskId so listBoards carries the segment.
+    TestBed.inject(BoardsStore).setTaskId(TASK_ID);
   });
 
   afterEach(() => window.localStorage.clear());
@@ -238,7 +242,7 @@ describe('BoardsListPage', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     fixture.detectChanges();
 
-    expect(createSpy).toHaveBeenCalledWith(7, { name: 'Sprint 99' });
+    expect(createSpy).toHaveBeenCalledWith(7, 9, { name: 'Sprint 99' });
 
     const createReq = httpMock.expectOne(BOARDS_URL(7));
     expect(createReq.request.method).toBe('POST');
@@ -318,7 +322,7 @@ describe('BoardsListPage', () => {
     expect(data.boardId).toBe(1);
     expect(data.initialName).toBe('Sprint 42');
 
-    expect(updateSpy).toHaveBeenCalledWith(7, 1, { name: 'Sprint 99' });
+    expect(updateSpy).toHaveBeenCalledWith(7, 9, 1, { name: 'Sprint 99' });
 
     const req = httpMock.expectOne(`${BOARDS_URL(7)}/1`);
     expect(req.request.method).toBe('PATCH');
@@ -351,7 +355,7 @@ describe('BoardsListPage', () => {
     fixture.detectChanges();
 
     expect(confirmSpy).toHaveBeenCalled();
-    expect(deleteSpy).toHaveBeenCalledWith(7, 1);
+    expect(deleteSpy).toHaveBeenCalledWith(7, 9, 1);
 
     // 409 conflict path: invoke the page method directly with the API
     // configured to return a typed conflict error. The page must open

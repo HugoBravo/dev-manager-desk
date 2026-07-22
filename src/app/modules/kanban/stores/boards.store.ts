@@ -37,6 +37,16 @@ export type BoardsStoreLoading = 'idle' | 'list' | 'detail';
  * Because the server returned a resource with the canonical `position`, the
  * store can do a surgical update of the affected column's card list without
  * a refetch.
+ *
+ * ## Kanban-per-task taskId threading (S1)
+ *
+ * Every URL-scoped API call (reads AND writes) requires `taskId`. The store
+ * carries a single `taskId` slot set via {@link setTaskId} before any
+ * read/write is issued; pages call `store.setTaskId(taskId)` once on
+ * activation. Internally the store fails fast (throws) if `taskId` is
+ * missing when an API call is dispatched — this guarantees the URL chain is
+ * always complete and surfaces a programmer error in tests instead of
+ * silently dropping the segment.
  */
 @Service()
 export class BoardsStore {
@@ -49,6 +59,57 @@ export class BoardsStore {
   private readonly _loading = signal<BoardsStoreLoading>('idle');
   private readonly _trashLoading = signal<boolean>(false);
   private readonly _error = signal<ApiError | null>(null);
+
+  /**
+   * The currently-active task id. Set via {@link setTaskId} from the page
+   * that owns the route param (S2); cleared via {@link clearTaskId} on
+   * navigation away. Every URL-scoped API call reads this slot.
+   */
+  private _taskId: number | null = null;
+
+  /**
+   * Bind the store to a specific task. Called by the owning page on init
+   * and on route-param change. The value is required for every URL-scoped
+   * API call — pages must set it before triggering reads or writes.
+   */
+  setTaskId(taskId: number): void {
+    this._taskId = taskId;
+  }
+
+  /**
+   * Clear the task binding. Call this in `ngOnDestroy` / route cleanup so a
+   * stale taskId doesn't leak into the next page's API calls.
+   */
+  clearTaskId(): void {
+    this._taskId = null;
+  }
+
+  /**
+   * Read-only access to the active task id. Throws if not set; use this in
+   * callers that need to forward the id to write APIs directly.
+   */
+  get taskId(): number {
+    if (this._taskId === null) {
+      throw new Error(
+        'BoardsStore: taskId is not set. Call setTaskId(taskId) before triggering API calls.',
+      );
+    }
+    return this._taskId;
+  }
+
+  /**
+   * Returns the active task id or throws. Use this in API wrappers so the
+   * failure surfaces immediately when a page forgot to call
+   * {@link setTaskId}.
+   */
+  private requireTaskId(): number {
+    if (this._taskId === null) {
+      throw new Error(
+        'BoardsStore: taskId is not set. Call setTaskId(taskId) before triggering API calls.',
+      );
+    }
+    return this._taskId;
+  }
 
   readonly boards = this._boards.asReadonly();
   /**
@@ -87,15 +148,18 @@ export class BoardsStore {
   readonly isDetailLoading = computed(() => this._loading() === 'detail');
 
   /**
-   * Fetch the boards list for a project. Sets the store's `error` signal
+   * Fetch the boards list for a task. Sets the store's `error` signal
    * on failure and returns `null` so callers using `await` don't have to
    * wrap in try/catch (the page reads `store.error()` for the user message).
+   *
+   * Requires {@link setTaskId} to have been called.
    */
   async loadBoards(projectId: number): Promise<readonly Board[] | null> {
+    const taskId = this.requireTaskId();
     this._loading.set('list');
     this._error.set(null);
     try {
-      const list = await firstValueFrom(this.api.listBoards(projectId));
+      const list = await firstValueFrom(this.api.listBoards(projectId, taskId));
       this._boards.set(list);
       return list;
     } catch (err) {
@@ -107,16 +171,21 @@ export class BoardsStore {
   }
 
   /**
-   * Fetch the soft-deleted boards for a project (api-doc §16 trash). Sets
+   * Fetch the soft-deleted boards for a task (api-doc §16 trash). Sets
    * `trashLoading` while in flight and writes the result into the `trash`
    * signal. On failure, sets `store.error()` and returns `null` — the trash
    * page renders the error state without a re-throw.
+   *
+   * Requires {@link setTaskId} to have been called.
    */
   async loadTrash(projectId: number, page = 1): Promise<readonly Board[] | null> {
+    const taskId = this.requireTaskId();
     this._trashLoading.set(true);
     this._error.set(null);
     try {
-      const list = await firstValueFrom(this.api.listTrashedBoards(projectId, page));
+      const list = await firstValueFrom(
+        this.api.listTrashedBoards(projectId, taskId, page),
+      );
       this._trash.set(list);
       return list;
     } catch (err) {
@@ -131,12 +200,17 @@ export class BoardsStore {
    * Fetch the board detail (board + columns + cards-per-column). Writes the
    * detail cache. On error, sets `store.error()` and returns `null` so the
    * page renders the error state without a re-throw.
+   *
+   * Requires {@link setTaskId} to have been called.
    */
   async loadBoard(projectId: number, boardId: number): Promise<BoardDetail | null> {
+    const taskId = this.requireTaskId();
     this._loading.set('detail');
     this._error.set(null);
     try {
-      const detail = await firstValueFrom(this.api.getBoardDetail(projectId, boardId));
+      const detail = await firstValueFrom(
+        this.api.getBoardDetail(projectId, taskId, boardId),
+      );
       this._currentBoard.set(detail);
       return detail;
     } catch (err) {

@@ -47,10 +47,13 @@ export const ATTACHMENT_MAX_BYTES = 5 * 1024 * 1024;
  * Attachments API. Mirrors {@link CommentsApi}: thin HttpClient wrapper,
  * W3 wiring through {@link catchHttpError}.
  *
- * URL shape per api-doc §9:
- *   GET    /api/v1/projects/{p}/kanban/boards/{b}/columns/{c}/cards/{card}/attachments
- *   POST   /api/v1/projects/{p}/kanban/boards/{b}/columns/{c}/cards/{card}/attachments
- *   DELETE /api/v1/projects/{p}/kanban/boards/{b}/columns/{c}/cards/{card}/attachments/{id}
+ * URL shape per api-doc §9 (kanban-per-task):
+ *   GET    /api/v1/projects/{p}/tasks/{t}/kanban/boards/{b}/columns/{c}/cards/{card}/attachments
+ *   POST   /api/v1/projects/{p}/tasks/{t}/kanban/boards/{b}/columns/{c}/cards/{card}/attachments
+ *   DELETE /api/v1/projects/{p}/tasks/{t}/kanban/boards/{b}/columns/{c}/cards/{card}/attachments/{id}
+ *
+ * `taskId` is inserted between `projectId` and the `kanban/...` segment;
+ * the rest of the path is unchanged from the previous contract.
  *
  * The POST sends `multipart/form-data` with a single `file` field. Mime +
  * size pre-checks live in {@link AttachmentsStore} so the dialog can show
@@ -63,11 +66,12 @@ export class AttachmentsApi {
 
   listAttachments(
     projectId: number,
+    taskId: number,
     boardId: number,
     columnId: number,
     cardId: number,
   ): Observable<AttachmentList> {
-    const url = `${this.baseUrl(projectId, boardId, columnId, cardId)}/attachments`;
+    const url = `${this.baseUrl(projectId, taskId, boardId, columnId, cardId)}/attachments`;
     return this.http
       .get<unknown>(url)
       .pipe(
@@ -78,12 +82,13 @@ export class AttachmentsApi {
 
   uploadAttachment(
     projectId: number,
+    taskId: number,
     boardId: number,
     columnId: number,
     cardId: number,
     file: File,
   ): Observable<KanbanAttachment> {
-    const url = `${this.baseUrl(projectId, boardId, columnId, cardId)}/attachments`;
+    const url = `${this.baseUrl(projectId, taskId, boardId, columnId, cardId)}/attachments`;
     const form = new FormData();
     form.append('file', file, file.name);
     return this.http
@@ -93,22 +98,24 @@ export class AttachmentsApi {
 
   deleteAttachment(
     projectId: number,
+    taskId: number,
     boardId: number,
     columnId: number,
     cardId: number,
     attachmentId: number,
   ): Observable<void> {
-    const url = `${this.baseUrl(projectId, boardId, columnId, cardId)}/attachments/${attachmentId}`;
+    const url = `${this.baseUrl(projectId, taskId, boardId, columnId, cardId)}/attachments/${attachmentId}`;
     return this.http.delete<void>(url).pipe(catchError((err: unknown) => catchHttpError(err)));
   }
 
   private baseUrl(
     projectId: number,
+    taskId: number,
     boardId: number,
     columnId: number,
     cardId: number,
   ): string {
     const prefix = `${this.apiConfig.apiBaseUrl}/v1`;
-    return `${prefix}/projects/${projectId}/kanban/boards/${boardId}/columns/${columnId}/cards/${cardId}`;
+    return `${prefix}/projects/${projectId}/tasks/${taskId}/kanban/boards/${boardId}/columns/${columnId}/cards/${cardId}`;
   }
 }

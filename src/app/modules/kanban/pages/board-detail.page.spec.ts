@@ -24,6 +24,7 @@ import type {
 const API_BASE_URL = 'http://localhost:8000/api';
 const API_PREFIX = '/v1';
 const FULL_PREFIX = `${API_BASE_URL}${API_PREFIX}`;
+const TASK_ID = 9;
 
 const sampleBoard = () => ({
   id: 4,
@@ -94,21 +95,21 @@ async function flushDetail(
   cardsByColumnId: Record<number, Array<unknown>>,
 ): Promise<void> {
   httpMock
-    .expectOne(`${FULL_PREFIX}/projects/${projectId}/kanban/boards/${boardId}`)
+    .expectOne(`${FULL_PREFIX}/projects/${projectId}/tasks/${TASK_ID}/kanban/boards/${boardId}`)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .flush(boardResult as any);
   // The page always issues a columns request (even when the response is
   // empty) — flush unconditionally so httpMock.verify() at afterEach is
   // satisfied.
   httpMock
-    .expectOne(`${FULL_PREFIX}/projects/${projectId}/kanban/boards/${boardId}/columns`)
+    .expectOne(`${FULL_PREFIX}/projects/${projectId}/tasks/${TASK_ID}/kanban/boards/${boardId}/columns`)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .flush(paginated(columns) as any);
   for (const column of columns) {
     const cards = cardsByColumnId[column.id] ?? [];
     httpMock
       .expectOne(
-        `${FULL_PREFIX}/projects/${projectId}/kanban/boards/${boardId}/columns/${column.id}/cards`,
+        `${FULL_PREFIX}/projects/${projectId}/tasks/${TASK_ID}/kanban/boards/${boardId}/columns/${column.id}/cards`,
       )
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .flush(paginated(cards) as any);
@@ -141,6 +142,8 @@ describe('BoardDetailPage', () => {
     // Silence snackbar dialogs in tests.
     TestBed.inject(MatSnackBar);
     TestBed.inject(MatDialog);
+    // S1: bind the store to a taskId so the detail fetch + writes carry the segment.
+    TestBed.inject(BoardsStore).setTaskId(TASK_ID);
   });
 
   afterEach(() => window.localStorage.clear());
@@ -271,9 +274,9 @@ describe('BoardDetailPage', () => {
     // Flush a synthetic 404 — no columns flush is needed because forkJoin
     // cancels the sibling when board$ errors.
     httpMock
-      .expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4`)
+      .expectOne(`${FULL_PREFIX}/projects/7/tasks/9/kanban/boards/4`)
       .flush({ message: 'gone' }, { status: 404, statusText: 'Not Found' });
-    httpMock.expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4/columns`);
+    httpMock.expectOne(`${FULL_PREFIX}/projects/7/tasks/9/kanban/boards/4/columns`);
     await promise;
     await fixture.whenStable();
     fixture.detectChanges();
@@ -310,7 +313,7 @@ describe('BoardDetailPage', () => {
     const fixture = createComponent();
     const httpMock = TestBed.inject(HttpTestingController);
     const store = TestBed.inject(BoardsStore);
-    const moveBaseUrl = `${FULL_PREFIX}/projects/7/kanban/boards/4/columns/12/cards/87/move`;
+    const moveBaseUrl = `${FULL_PREFIX}/projects/7/tasks/9/kanban/boards/4/columns/12/cards/87/move`;
 
     const promise = fixture.whenStable();
     await flushDetail(httpMock, 7, 4, sampleBoard(), [sampleColumn(12), sampleColumn(13)], {
@@ -374,9 +377,9 @@ describe('BoardDetailPage', () => {
     await fixture.whenStable();
 
     // Page MUST refetch: board + columns + cards per column.
-    const refetchBoardReq = httpMock.expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4`);
+    const refetchBoardReq = httpMock.expectOne(`${FULL_PREFIX}/projects/7/tasks/9/kanban/boards/4`);
     const refetchColumnsReq = httpMock.expectOne(
-      `${FULL_PREFIX}/projects/7/kanban/boards/4/columns`,
+      `${FULL_PREFIX}/projects/7/tasks/9/kanban/boards/4/columns`,
     );
     refetchBoardReq.flush(sampleBoard());
     refetchColumnsReq.flush(paginated([sampleColumn(12), sampleColumn(13)]));
@@ -462,7 +465,7 @@ describe('BoardDetailPage', () => {
     await fixture.whenStable();
     fixture.detectChanges();
 
-    const auditReq = httpMock.expectOne(`${FULL_PREFIX}/projects/7/kanban/boards/4/audit`);
+    const auditReq = httpMock.expectOne(`${FULL_PREFIX}/projects/7/tasks/9/kanban/boards/4/audit`);
     expect(auditReq.request.method).toBe('GET');
     auditReq.flush(
       paginated([
@@ -566,7 +569,7 @@ describe('BoardDetailPage', () => {
     fixture.detectChanges();
 
     expect(confirmSpy).toHaveBeenCalled();
-    expect(deleteSpy).toHaveBeenCalledWith(7, 4);
+    expect(deleteSpy).toHaveBeenCalledWith(7, 9, 4);
     expect(navSpy).toHaveBeenCalledWith(['/modules/kanban/projects', 7, 'boards']);
   });
 });

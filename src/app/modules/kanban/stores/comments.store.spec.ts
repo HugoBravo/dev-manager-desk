@@ -12,6 +12,7 @@ import { CommentsStore, COMMENT_EDIT_WINDOW_MS } from './comments.store';
 import type { KanbanComment } from '../models';
 
 const API_BASE_URL = 'http://localhost:8000/api';
+const TASK_ID = 9;
 
 const sampleComment = (overrides: Partial<KanbanComment> = {}): KanbanComment => ({
   id: 311,
@@ -47,6 +48,8 @@ function setupStore(authUser: unknown): {
   });
   const store = TestBed.inject(CommentsStore);
   const httpMock = TestBed.inject(HttpTestingController);
+  // S1: bind the store to a taskId before triggering any URL-scoped load.
+  store.setTaskId(TASK_ID);
   return { store, authStub, httpMock };
 }
 
@@ -140,7 +143,7 @@ describe('CommentsStore — groupThreads (thread-per-author)', () => {
     ];
     const loadPromise = store.load(7, 4, 12, 87);
     const req = httpMock.expectOne(
-      'http://localhost:8000/api/v1/projects/7/kanban/boards/4/columns/12/cards/87/comments',
+      'http://localhost:8000/api/v1/projects/7/tasks/9/kanban/boards/4/columns/12/cards/87/comments',
     );
     req.flush({ data: comments });
     await loadPromise;
@@ -160,7 +163,7 @@ describe('CommentsStore — groupThreads (thread-per-author)', () => {
     ];
     const loadPromise = store.load(7, 4, 12, 87);
     const req = httpMock.expectOne(
-      'http://localhost:8000/api/v1/projects/7/kanban/boards/4/columns/12/cards/87/comments',
+      'http://localhost:8000/api/v1/projects/7/tasks/9/kanban/boards/4/columns/12/cards/87/comments',
     );
     req.flush({ data: comments });
     await loadPromise;
