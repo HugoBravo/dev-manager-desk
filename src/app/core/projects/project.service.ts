@@ -5,6 +5,7 @@ import { ProjectsApi } from './projects.api';
 import { ErrorNormalizer } from '../errors/error-normalizer';
 import type { ApiError } from '../errors/api-error';
 import type { Project, ProjectPatch } from './project.model';
+import { TasksService } from '../tasks/tasks.service';
 
 const STORAGE_KEY = 'dev-manager-desk:project:selected';
 const LEGACY_STORAGE_KEY = 'dm:selectedProjectId';
@@ -27,6 +28,16 @@ const LEGACY_STORAGE_KEY = 'dm:selectedProjectId';
 @Service()
 export class ProjectService {
   private readonly api = inject(ProjectsApi);
+  /**
+   * S4 (kanban-per-task): after the active project changes (e.g. a
+   * freshly-created project becomes active), the active task may now
+   * belong to a DIFFERENT project than the one the user was just
+   * browsing. {@link TasksService.bootstrap} refreshes the task list
+   * for the new project and clears a stale selection in one pass —
+   * keeping `ProjectService` as the single source of truth for the
+   * "which project am I on" question.
+   */
+  private readonly tasks = inject(TasksService);
 
   private readonly _projects = signal<readonly Project[]>([]);
   private readonly _currentId = signal<number | null>(this.readStoredId());
@@ -68,11 +79,21 @@ export class ProjectService {
    * dialog) should `await` the promise to learn when the API call has
    * resolved; on rejection the list and active selection are unchanged so
    * the user can retry from the same context.
+   *
+   * S4 (kanban-per-task): once the new project is active, revalidate
+   * the active task via {@link TasksService.bootstrap} so a task
+   * belonging to the previous project is cleared, and the task list
+   * for the new project starts empty until the user opens the tasks
+   * module. We do this fire-and-forget — the create response is
+   * already in the caller's hands by the time we kick off the task
+   * revalidation, and a task-list failure must not roll back a
+   * successful project create.
    */
   async create(input: { name: string; description?: string | null }): Promise<Project> {
     const project = await firstValueFrom(this.api.create(input));
     this._projects.update((list) => [project, ...list]);
     this.setActive(project);
+    void this.tasks.bootstrap(project.id);
     return project;
   }
 

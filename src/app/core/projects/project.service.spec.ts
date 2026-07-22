@@ -6,6 +6,7 @@ import {
 } from '@angular/common/http/testing';
 
 import { API_CONFIG } from '../config/api-config';
+import { TasksService } from '../tasks/tasks.service';
 import { ProjectService } from './project.service';
 import type { Project } from './project.model';
 
@@ -26,7 +27,13 @@ const sampleProject = (overrides: Partial<Project> = {}): Project => ({
   ...overrides,
 });
 
-function configure(storedId: number | null = null, legacyId: number | null = null): {
+function configure(
+  storedId: number | null = null,
+  legacyId: number | null = null,
+  tasksStub: { bootstrap: ReturnType<typeof vi.fn> } = {
+    bootstrap: vi.fn().mockResolvedValue(undefined),
+  },
+): {
   service: ProjectService;
   httpMock: HttpTestingController;
 } {
@@ -45,6 +52,11 @@ function configure(storedId: number | null = null, legacyId: number | null = nul
         provide: API_CONFIG,
         useValue: { apiBaseUrl: API_BASE_URL },
       },
+      // S4: ProjectService.create() now calls TasksService.bootstrap().
+      // Provide a default no-op stub so existing tests do not need to
+      // manage the task-list request. The dedicated S4 test below
+      // overrides this stub to assert the bootstrap() call.
+      { provide: TasksService, useValue: tasksStub },
     ],
   });
   return {
@@ -284,6 +296,33 @@ describe('ProjectService', () => {
     // No mutation of the active id.
     expect(service.currentId()).toBeNull();
     expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
+    httpMock.verify();
+  });
+
+  it('create() revalidates the active task via TasksService for the new project (S4)', async () => {
+    // S4: after creating a new project and making it active, the active
+    // task (if any) belongs to the OLD project. We re-bootstrap the
+    // task list against the NEW project id; TasksService.bootstrap()
+    // handles clearing a stale selection internally.
+    const tasksStub = { bootstrap: vi.fn().mockResolvedValue(undefined) };
+    const { service, httpMock } = configure(undefined, null, tasksStub);
+
+    const bootstrapPromise = service.bootstrap();
+    httpMock.expectOne(projectsUrl).flush(paginated([sampleProject({ id: 1, name: 'Existing' })]));
+    await bootstrapPromise;
+
+    const created = sampleProject({ id: 99, name: 'Fresh' });
+    const createPromise = service.create({ name: 'Fresh' });
+
+    const req = httpMock.expectOne(`${API_BASE_URL}${API_PREFIX}/projects`);
+    req.flush({ data: created });
+
+    await createPromise;
+
+    // S4 contract: create() must call TasksService.bootstrap() with the
+    // new project id so the task list refreshes (and stale task
+    // selections are cleared) against the active project.
+    expect(tasksStub.bootstrap).toHaveBeenCalledWith(99);
     httpMock.verify();
   });
 
