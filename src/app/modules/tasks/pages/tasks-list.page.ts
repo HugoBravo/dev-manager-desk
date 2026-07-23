@@ -144,10 +144,16 @@ export class TasksListPage {
   protected openEditor(task?: Task): void {
     const ref = this.dialog.open<TaskEditorDialog, TaskEditorDialogData, TaskEditorDialogResult>(TaskEditorDialog, { data: { task } });
     void firstValueFrom(ref.afterClosed()).then((result) => {
-      if (!result || result.action !== 'saved' || !result.task) return;
+      if (!result || result.action === 'cancel') return;
       const projectId = Number(this.projectId() ?? this.projects.currentId());
-      if (task) void this.service.update(projectId, task.id, result.task);
-      else void this.service.create(projectId, result.task);
+      if (result.action === 'saved' && result.task) {
+        if (task) void this.service.update(projectId, task.id, result.task);
+        else void this.service.create(projectId, result.task);
+        return;
+      }
+      if (result.action === 'archived' && task) {
+        void this.service.archive(projectId, task.id);
+      }
     });
   }
 }
