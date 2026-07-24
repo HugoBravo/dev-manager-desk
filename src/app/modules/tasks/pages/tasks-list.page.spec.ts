@@ -202,11 +202,12 @@ describe('TasksListPage', () => {
   });
 
   it('filters by HIGH priority and shows only HIGH tasks', async () => {
-    const highLowTasks: Task[] = [
+    const allPriorityTasks: Task[] = [
       { id: 10, project_id: 7, name: 'Urgent', slug: 'urgent', description: null, status: 'open', priority: 'HIGH', archived_at: null, created_at: '', updated_at: '' },
-      { id: 11, project_id: 7, name: 'Backlog', slug: 'backlog', description: null, status: 'open', priority: 'LOW', archived_at: null, created_at: '', updated_at: '' },
+      { id: 11, project_id: 7, name: 'Planned', slug: 'planned', description: null, status: 'open', priority: 'MEDIUM', archived_at: null, created_at: '', updated_at: '' },
+      { id: 12, project_id: 7, name: 'Backlog', slug: 'backlog', description: null, status: 'open', priority: 'LOW', archived_at: null, created_at: '', updated_at: '' },
     ];
-    const { fixture, httpMock } = await configure('7', highLowTasks);
+    const { fixture, httpMock } = await configure('7', allPriorityTasks);
     await fixture.whenStable();
     fixture.detectChanges();
 
