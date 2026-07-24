@@ -1,4 +1,5 @@
 import { Component, computed, effect, inject, input, signal } from '@angular/core';
+import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
@@ -21,9 +22,23 @@ import {
 } from '../components/task-editor-dialog/task-editor-dialog';
 
 export type TaskFilter = TaskStatus | 'all';
+export type PriorityFilter = TaskPriority | 'all';
 
-export function filterTasks(tasks: readonly Task[], status: TaskFilter): readonly Task[] {
-  return status === 'all' ? tasks : tasks.filter((task) => task.status === status);
+/**
+ * Filters the already-loaded task collection in memory. The task list endpoint
+ * is intentionally unchanged because this page currently loads the complete
+ * project task collection before applying its existing status filter.
+ */
+export function filterTasks(
+  tasks: readonly Task[],
+  status: TaskFilter,
+  priority: PriorityFilter = 'all',
+): readonly Task[] {
+  return tasks.filter(
+    (task) =>
+      (status === 'all' || task.status === status) &&
+      (priority === 'all' || task.priority === priority),
+  );
 }
 
 interface PriorityChip {
@@ -44,7 +59,17 @@ export function priorityChip(priority: TaskPriority): PriorityChip {
 
 @Component({
   selector: 'app-tasks-list-page',
-  imports: [MatButtonModule, MatCardModule, MatDialogModule, MatFormFieldModule, MatIconModule, MatInputModule, MatSelectModule, MatProgressSpinnerModule],
+  imports: [
+    MatButtonModule,
+    MatButtonToggleModule,
+    MatCardModule,
+    MatDialogModule,
+    MatFormFieldModule,
+    MatIconModule,
+    MatInputModule,
+    MatSelectModule,
+    MatProgressSpinnerModule,
+  ],
   template: `
     <section class="tasks-page" aria-labelledby="tasks-title">
       <header class="tasks-header">
@@ -56,7 +81,7 @@ export function priorityChip(priority: TaskPriority): PriorityChip {
       </header>
 
       <div class="tasks-toolbar">
-        <mat-form-field appearance="outline" class="tasks-toolbar__filter">
+        <mat-form-field appearance="outline" class="tasks-toolbar__filter" subscriptSizing="dynamic">
           <mat-label>Status</mat-label>
           <mat-select [value]="status()" (selectionChange)="status.set($event.value)">
             <mat-option value="all">All</mat-option>
@@ -65,6 +90,20 @@ export function priorityChip(priority: TaskPriority): PriorityChip {
             <mat-option value="done">Done</mat-option>
           </mat-select>
         </mat-form-field>
+        <div class="tasks-toolbar__priority">
+          <span class="tasks-toolbar__label">Priority</span>
+          <mat-button-toggle-group
+            aria-label="Filter tasks by priority"
+            [hideSingleSelectionIndicator]="true"
+            [value]="priority()"
+            (change)="priority.set($event.value)"
+          >
+            <mat-button-toggle value="all">All</mat-button-toggle>
+            <mat-button-toggle value="HIGH">High</mat-button-toggle>
+            <mat-button-toggle value="MEDIUM">Medium</mat-button-toggle>
+            <mat-button-toggle value="LOW">Low</mat-button-toggle>
+          </mat-button-toggle-group>
+        </div>
       </div>
 
       @if (loading()) {
@@ -90,6 +129,9 @@ export function priorityChip(priority: TaskPriority): PriorityChip {
                 <mat-card-content class="task-card__body">
                   <span
                     class="task-card__priority"
+                    [class.task-card__priority--high]="task.priority === 'HIGH'"
+                    [class.task-card__priority--medium]="task.priority === 'MEDIUM'"
+                    [class.task-card__priority--low]="task.priority === 'LOW'"
                     [attr.data-priority]="task.priority"
                     [attr.aria-label]="'Priority ' + priorityChip(task.priority).label"
                   >
@@ -119,6 +161,8 @@ export function priorityChip(priority: TaskPriority): PriorityChip {
       .tasks-header__cta { flex-shrink: 0; align-self: flex-start; }
       .tasks-toolbar { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; }
       .tasks-toolbar__filter { width: 220px; }
+      .tasks-toolbar__priority { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+      .tasks-toolbar__label { color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-label-large); }
       .tasks-state { padding: 1.5rem; border-radius: 8px; background: rgba(255, 255, 255, 0.05); }
       .tasks-empty { padding: 1rem 1.5rem; }
       .task-list { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; }
@@ -128,11 +172,11 @@ export function priorityChip(priority: TaskPriority): PriorityChip {
       .task-card__status { text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.05em; }
       .task-card__body { flex: 1 1 auto; display: flex; flex-direction: column; gap: 0.75rem; }
       .task-card__body p { margin: 0; color: rgba(255, 255, 255, 0.75); }
-      .task-card__priority { display: inline-flex; align-items: center; gap: 0.375rem; align-self: flex-start; padding: 0.25rem 0.625rem; border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.12); background: rgba(255, 255, 255, 0.04); color: rgba(255, 255, 255, 0.85); font-size: 0.75rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; }
+      .task-card__priority { display: inline-flex; align-items: center; gap: 0.375rem; align-self: flex-start; padding: 0.25rem 0.625rem; border-radius: 999px; border: 1px solid var(--mat-sys-outline-variant); background: var(--mat-sys-surface-container-high); color: var(--mat-sys-on-surface); font-size: 0.75rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; }
       .task-card__priority-icon { font-size: 0.875rem; width: 0.875rem; height: 0.875rem; line-height: 0.875rem; }
-      .task-card__priority[data-priority="HIGH"] { background: rgba(244, 67, 54, 0.18); border-color: rgba(244, 67, 54, 0.55); color: #ef9a9a; }
-      .task-card__priority[data-priority="MEDIUM"] { background: rgba(255, 152, 0, 0.18); border-color: rgba(255, 152, 0, 0.55); color: #ffb74d; }
-      .task-card__priority[data-priority="LOW"] { background: rgba(76, 175, 80, 0.18); border-color: rgba(76, 175, 80, 0.55); color: #81c784; }
+      .task-card__priority--high { background: var(--mat-sys-error-container); border-color: var(--mat-sys-error); color: var(--mat-sys-on-error-container); }
+      .task-card__priority--medium { background: var(--mat-sys-tertiary-container); border-color: var(--mat-sys-tertiary); color: var(--mat-sys-on-tertiary-container); }
+      .task-card__priority--low { background: var(--mat-sys-secondary-container); border-color: var(--mat-sys-secondary); color: var(--mat-sys-on-secondary-container); }
       .task-card__actions { display: flex; flex-wrap: wrap; gap: 0.5rem; padding: 0.5rem 1rem 1rem; }
     `,
   ],
@@ -148,7 +192,10 @@ export class TasksListPage {
   protected readonly loading = this.service.loading;
   protected readonly error = this.service.error;
   protected readonly status = signal<TaskFilter>('all');
-  protected readonly visibleTasks = computed(() => filterTasks(this.tasks(), this.status()));
+  protected readonly priority = signal<PriorityFilter>('all');
+  protected readonly visibleTasks = computed(() =>
+    filterTasks(this.tasks(), this.status(), this.priority()),
+  );
   protected readonly priorityChip = priorityChip;
 
   constructor() {

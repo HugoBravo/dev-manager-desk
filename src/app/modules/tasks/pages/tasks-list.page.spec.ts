@@ -40,11 +40,16 @@ class FakeMatDialog {
 
 describe('filterTasks', () => {
   it('returns only tasks matching the selected status', () => {
-    expect(filterTasks(tasks, 'done')).toEqual([tasks[1]]);
+    expect(filterTasks(tasks, 'done', 'all')).toEqual([tasks[1]]);
   });
 
-  it('returns every task for the all filter', () => {
-    expect(filterTasks(tasks, 'all')).toEqual(tasks);
+  it('combines status and priority filters client-side', () => {
+    expect(filterTasks(tasks, 'all', 'LOW')).toEqual([tasks[1]]);
+    expect(filterTasks(tasks, 'open', 'LOW')).toEqual([]);
+  });
+
+  it('returns every task when both filters are set to all', () => {
+    expect(filterTasks(tasks, 'all', 'all')).toEqual(tasks);
   });
 });
 
@@ -135,7 +140,7 @@ describe('TasksListPage', () => {
     httpMock.verify();
   });
 
-  it('renders a priority chip per task with text label and data-priority attribute', async () => {
+  it('renders a priority chip per task with text label and theme-safe priority class', async () => {
     const { fixture, httpMock } = await configure();
     // The bootstrap is async (`firstValueFrom(api.list(...))`); wait for the
     // microtask to resolve and re-render before inspecting the rendered list.
@@ -146,13 +151,41 @@ describe('TasksListPage', () => {
     expect(chips).toHaveLength(tasks.length);
     const values = Array.from(chips).map((chip) => chip.getAttribute('data-priority'));
     expect(values).toEqual(tasks.map((task) => task.priority));
-    // Pair color treatment with visible text — never colour-only.
-    for (const chip of Array.from(chips)) {
+    // Pair theme-safe color treatment with visible text — never colour-only.
+    for (const [index, chip] of Array.from(chips).entries()) {
+      const priority = tasks[index]!.priority.toLowerCase();
       const label = chip.querySelector('.task-card__priority-label')?.textContent?.trim() ?? '';
+      expect(chip.classList.contains(`task-card__priority--${priority}`)).toBe(true);
       expect(label.length).toBeGreaterThan(0);
       expect(chip.querySelector('mat-icon')).not.toBeNull();
       expect(chip.getAttribute('aria-label')).toMatch(/^Priority /);
     }
+    httpMock.verify();
+  });
+
+  it('renders a segmented priority filter and applies it to the loaded list', async () => {
+    const { fixture, httpMock } = await configure();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    const group = host.querySelector<HTMLElement>(
+      'mat-button-toggle-group[aria-label="Filter tasks by priority"]',
+    );
+    expect(group).not.toBeNull();
+    const toggles = group?.querySelectorAll<HTMLElement>('mat-button-toggle');
+    expect(toggles).toHaveLength(4);
+
+    const lowToggle = Array.from(toggles ?? []).find(
+      (toggle) => toggle.textContent?.trim() === 'Low',
+    );
+    lowToggle?.querySelector<HTMLButtonElement>('button')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const cards = host.querySelectorAll<HTMLElement>('.task-card');
+    expect(cards).toHaveLength(1);
+    expect(cards[0]?.querySelector('.task-card__title')?.textContent?.trim()).toBe('Done');
     httpMock.verify();
   });
 });
