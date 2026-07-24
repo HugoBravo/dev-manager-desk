@@ -4,7 +4,6 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
@@ -15,6 +14,7 @@ import { ProjectService } from '../../../core/projects/project.service';
 import { TasksService } from '../../../core/tasks/tasks.service';
 import type { Task, TaskPriority, TaskStatus } from '../../../core/tasks/task.model';
 import { buildBoardRoute } from '../../kanban/utils/build-board-route';
+import { TaskCard } from '../components/task-card/task-card';
 import {
   TaskEditorDialog,
   type TaskEditorDialogData,
@@ -41,21 +41,7 @@ export function filterTasks(
   );
 }
 
-interface PriorityChip {
-  readonly value: TaskPriority;
-  readonly label: string;
-  readonly icon: string;
-}
-
-const PRIORITY_CHIP: Readonly<Record<TaskPriority, PriorityChip>> = {
-  HIGH: { value: 'HIGH', label: 'High', icon: 'priority_high' },
-  MEDIUM: { value: 'MEDIUM', label: 'Medium', icon: 'drag_handle' },
-  LOW: { value: 'LOW', label: 'Low', icon: 'low_priority' },
-};
-
-export function priorityChip(priority: TaskPriority): PriorityChip {
-  return PRIORITY_CHIP[priority];
-}
+export { priorityChip } from '../components/task-card/task-card';
 
 @Component({
   selector: 'app-tasks-list-page',
@@ -65,10 +51,10 @@ export function priorityChip(priority: TaskPriority): PriorityChip {
     MatCardModule,
     MatDialogModule,
     MatFormFieldModule,
-    MatIconModule,
     MatInputModule,
     MatSelectModule,
     MatProgressSpinnerModule,
+    TaskCard,
   ],
   template: `
     <section class="tasks-page" aria-labelledby="tasks-title">
@@ -121,30 +107,11 @@ export function priorityChip(priority: TaskPriority): PriorityChip {
         <ul class="task-list" role="list">
           @for (task of visibleTasks(); track task.id) {
             <li class="task-item" role="listitem">
-              <mat-card class="task-card">
-                <mat-card-header>
-                  <mat-card-title class="task-card__title">{{ task.name }}</mat-card-title>
-                  <mat-card-subtitle class="task-card__status">{{ task.status }}</mat-card-subtitle>
-                </mat-card-header>
-                <mat-card-content class="task-card__body">
-                  <span
-                    class="task-card__priority"
-                    [class.task-card__priority--high]="task.priority === 'HIGH'"
-                    [class.task-card__priority--medium]="task.priority === 'MEDIUM'"
-                    [class.task-card__priority--low]="task.priority === 'LOW'"
-                    [attr.data-priority]="task.priority"
-                    [attr.aria-label]="'Priority ' + priorityChip(task.priority).label"
-                  >
-                    <mat-icon aria-hidden="true" class="task-card__priority-icon">{{ priorityChip(task.priority).icon }}</mat-icon>
-                    <span class="task-card__priority-label">{{ priorityChip(task.priority).label }}</span>
-                  </span>
-                  <p>{{ task.description || 'No description' }}</p>
-                </mat-card-content>
-                <mat-card-actions class="task-card__actions">
-                  <button mat-flat-button type="button" color="primary" (click)="select(task)">Open Kanban</button>
-                  <button mat-button type="button" (click)="openEditor(task)">Edit</button>
-                </mat-card-actions>
-              </mat-card>
+              <app-task-card [task]="task" />
+              <div class="task-card__actions">
+                <button mat-flat-button type="button" color="primary" (click)="select(task)">Open Kanban</button>
+                <button mat-button type="button" (click)="openEditor(task)">Edit</button>
+              </div>
             </li>
           }
         </ul>
@@ -166,18 +133,8 @@ export function priorityChip(priority: TaskPriority): PriorityChip {
       .tasks-state { padding: 1.5rem; border-radius: 8px; background: rgba(255, 255, 255, 0.05); }
       .tasks-empty { padding: 1rem 1.5rem; }
       .task-list { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; }
-      .task-item { display: block; }
-      .task-card { height: 100%; display: flex; flex-direction: column; }
-      .task-card__title { font-weight: 600; }
-      .task-card__status { text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.05em; }
-      .task-card__body { flex: 1 1 auto; display: flex; flex-direction: column; gap: 0.75rem; }
-      .task-card__body p { margin: 0; color: rgba(255, 255, 255, 0.75); }
-      .task-card__priority { display: inline-flex; align-items: center; gap: 0.375rem; align-self: flex-start; padding: 0.25rem 0.625rem; border-radius: 999px; border: 1px solid var(--mat-sys-outline-variant); background: var(--mat-sys-surface-container-high); color: var(--mat-sys-on-surface); font-size: 0.75rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; }
-      .task-card__priority-icon { font-size: 0.875rem; width: 0.875rem; height: 0.875rem; line-height: 0.875rem; }
-      .task-card__priority--high { background: var(--mat-sys-error-container); border-color: var(--mat-sys-error); color: var(--mat-sys-on-error-container); }
-      .task-card__priority--medium { background: var(--mat-sys-tertiary-container); border-color: var(--mat-sys-tertiary); color: var(--mat-sys-on-tertiary-container); }
-      .task-card__priority--low { background: var(--mat-sys-secondary-container); border-color: var(--mat-sys-secondary); color: var(--mat-sys-on-secondary-container); }
-      .task-card__actions { display: flex; flex-wrap: wrap; gap: 0.5rem; padding: 0.5rem 1rem 1rem; }
+       .task-item { display: block; }
+       .task-card__actions { display: flex; flex-wrap: wrap; gap: 0.5rem; padding: 0.5rem 1rem 1rem; }
     `,
   ],
   host: { '[attr.aria-busy]': 'loading()' },
@@ -193,10 +150,9 @@ export class TasksListPage {
   protected readonly error = this.service.error;
   protected readonly status = signal<TaskFilter>('all');
   protected readonly priority = signal<PriorityFilter>('all');
-  protected readonly visibleTasks = computed(() =>
-    filterTasks(this.tasks(), this.status(), this.priority()),
-  );
-  protected readonly priorityChip = priorityChip;
+   protected readonly visibleTasks = computed(() =>
+     filterTasks(this.tasks(), this.status(), this.priority()),
+   );
 
   constructor() {
     effect(() => {
