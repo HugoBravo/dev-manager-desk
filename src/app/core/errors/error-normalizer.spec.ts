@@ -241,6 +241,20 @@ describe('ErrorNormalizer', () => {
       expect(ErrorNormalizer.toUserMessage(r)).toContain('columns');
     });
 
+    it('task_has_active_boards -> task-archive copy', () => {
+      const r = ErrorNormalizer.normalize(409, {
+        code: 'task_has_active_boards',
+        message: 'Task 1 cannot be archived while it contains active boards.',
+        task_id: 1,
+      });
+      expect(r.kind).toBe('conflict');
+      if (r.kind === 'conflict') {
+        expect(r.code).toBe('task_has_active_boards');
+        expect(r.status).toBe(409);
+      }
+      expect(ErrorNormalizer.toUserMessage(r)).toContain('active Kanban board');
+    });
+
     it('429 -> rate-limited copy', () => {
       const r = ErrorNormalizer.normalize(429, { message: '...' });
       expect(ErrorNormalizer.toUserMessage(r)).toContain('Too many');

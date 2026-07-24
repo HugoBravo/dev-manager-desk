@@ -20,6 +20,8 @@ export const ERROR_MESSAGES = {
     'This board still has columns. Move or delete them first.',
   conflictColumnHasContents:
     'This column still has cards. Move or delete them first.',
+  conflictTaskHasActiveBoards:
+    'Cannot archive this task while it has an active Kanban board. Empty or archive its boards first.',
   conflictGeneric: 'This action conflicts with the current state.',
   positionExhausted:
     'Server ran out of room to position items. Please retry.',

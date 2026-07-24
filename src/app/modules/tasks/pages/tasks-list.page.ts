@@ -7,9 +7,12 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import { Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 
+import { ErrorNormalizer } from '../../../core/errors/error-normalizer';
+import type { ApiError } from '../../../core/errors/api-error';
 import { ProjectService } from '../../../core/projects/project.service';
 import { TasksService } from '../../../core/tasks/tasks.service';
 import type { Task, TaskPriority, TaskStatus } from '../../../core/tasks/task.model';
@@ -145,6 +148,7 @@ export class TasksListPage {
   private readonly service = inject(TasksService);
   private readonly dialog = inject(MatDialog);
   private readonly router = inject(Router);
+  private readonly snackBar = inject(MatSnackBar);
   protected readonly tasks = this.service.tasks;
   protected readonly loading = this.service.loading;
   protected readonly error = this.service.error;
@@ -186,8 +190,32 @@ export class TasksListPage {
         return;
       }
       if (result.action === 'archived' && task) {
-        void this.service.archive(projectId, task.id);
+        void this.archiveTask(projectId, task);
       }
     });
+  }
+
+  /**
+   * Archive a task and surface any failure as a snackbar. The service
+   * rethrows HTTP 409 as a typed `ApiError` (kind: 'conflict',
+   * code: 'task_has_active_boards') so the page can show a friendly
+   * message instead of letting the raw 409 bubble to the console.
+   * Other errors fall through to the normalizer's generic user
+   * message — the user is always told something went wrong, just
+   * without the W3 "raw HttpErrorResponse" leak.
+   */
+  private async archiveTask(projectId: number, task: Task): Promise<void> {
+    try {
+      await this.service.archive(projectId, task.id);
+    } catch (err) {
+      const apiError = err as ApiError | undefined;
+      const message =
+        apiError && typeof apiError === 'object' && 'kind' in apiError
+          ? ErrorNormalizer.toUserMessage(apiError as ApiError)
+          : 'Could not archive the task. Please try again.';
+      this.snackBar.open(message, 'Dismiss', {
+        duration: 5000,
+      });
+    }
   }
 }

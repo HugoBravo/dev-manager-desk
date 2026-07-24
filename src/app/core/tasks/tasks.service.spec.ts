@@ -1,8 +1,10 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 
 import { TasksApi } from './tasks.api';
 import { TasksService } from './tasks.service';
+import type { ApiError } from '../errors/api-error';
 import type { Task } from './task.model';
 
 const firstTask: Task = {
@@ -82,5 +84,71 @@ describe('TasksService', () => {
     const result = await service.create(7, { name: 'Default', description: null, status: 'open' });
     expect(result.priority).toBe('MEDIUM');
     expect(api.create).toHaveBeenCalledWith(7, { name: 'Default', description: null, status: 'open' });
+  });
+
+  it('archive() rethrows a 409 task_has_active_boards error as a typed ApiError', async () => {
+    // Seed the list so the service has a task to remove (matches the
+    // real-world flow: page calls archive() for a known task id).
+    api.list.mockReturnValue(of([firstTask]));
+    const httpError = new HttpErrorResponse({
+      status: 409,
+      statusText: 'Conflict',
+      url: '/api/v1/projects/7/tasks/2/archive',
+      error: {
+        message: 'Task 2 cannot be archived while it contains active boards.',
+        code: 'task_has_active_boards',
+        task_id: 2,
+      },
+    });
+    api.archive.mockReturnValue(throwError(() => httpError));
+    const service = TestBed.inject(TasksService);
+    await service.bootstrap(7);
+
+    let caught: unknown;
+    try {
+      await service.archive(7, firstTask.id);
+    } catch (err) {
+      caught = err;
+    }
+
+    // The error must be a typed ApiError so the page can branch on it
+    // without poking at the raw HttpErrorResponse.
+    expect(caught).toBeDefined();
+    const typed = caught as ApiError;
+    expect(typed.kind).toBe('conflict');
+    if (typed.kind === 'conflict') {
+      expect(typed.code).toBe('task_has_active_boards');
+      expect(typed.status).toBe(409);
+    }
+    // The task list must NOT be mutated on a 409 — the user is still
+    // looking at the task they tried to archive.
+    expect(service.tasks().some((task) => task.id === firstTask.id)).toBe(true);
+  });
+
+  it('archive() rethrows non-409 HTTP errors unchanged so the page can surface them', async () => {
+    api.list.mockReturnValue(of([firstTask]));
+    const httpError = new HttpErrorResponse({
+      status: 500,
+      statusText: 'Server Error',
+      url: '/api/v1/projects/7/tasks/2/archive',
+      error: { message: 'boom' },
+    });
+    api.archive.mockReturnValue(throwError(() => httpError));
+    const service = TestBed.inject(TasksService);
+    await service.bootstrap(7);
+
+    let caught: unknown;
+    try {
+      await service.archive(7, firstTask.id);
+    } catch (err) {
+      caught = err;
+    }
+
+    // Non-409 errors normalize to a typed ApiError too — the page must
+    // be able to call toUserMessage() without checking the raw shape.
+    const typed = caught as ApiError;
+    expect(typed).toBeDefined();
+    expect(typed.kind).toBe('http');
+    expect(typed.status).toBe(500);
   });
 });

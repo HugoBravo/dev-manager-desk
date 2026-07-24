@@ -139,7 +139,11 @@ export const ErrorNormalizer: ErrorNormalizerShape = {
 
     if (status === 409) {
       const code = envelope.code;
-      if (code === 'board_has_contents' || code === 'column_has_contents') {
+      if (
+        code === 'board_has_contents' ||
+        code === 'column_has_contents' ||
+        code === 'task_has_active_boards'
+      ) {
         return {
           kind: 'conflict',
           status: 409,
@@ -260,6 +264,9 @@ export const ErrorNormalizer: ErrorNormalizerShape = {
         }
         if (error.code === 'column_has_contents') {
           return ERROR_MESSAGES.conflictColumnHasContents;
+        }
+        if (error.code === 'task_has_active_boards') {
+          return ERROR_MESSAGES.conflictTaskHasActiveBoards;
         }
         return ERROR_MESSAGES.conflictGeneric;
       case 'http':

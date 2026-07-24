@@ -3,6 +3,9 @@ import { provideRouter, Router } from '@angular/router';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { MatDialog } from '@angular/material/dialog';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { NoopAnimationsModule } from '@angular/platform-browser/animations';
+import { of } from 'rxjs';
 
 import { filterTasks, priorityChip, TasksListPage } from './tasks-list.page';
 import { TasksService } from '../../../core/tasks/tasks.service';
@@ -71,7 +74,10 @@ describe('priorityChip', () => {
   });
 });
 
-async function configure(projectId = '7'): Promise<{
+async function configure(
+  projectId = '7',
+  seedTasks: readonly Task[] = tasks,
+): Promise<{
   component: TasksListPage;
   fixture: ReturnType<typeof TestBed.createComponent<TasksListPage>>;
   service: TasksService;
@@ -82,7 +88,7 @@ async function configure(projectId = '7'): Promise<{
   window.localStorage.clear();
   TestBed.resetTestingModule();
   await TestBed.configureTestingModule({
-    imports: [TasksListPage],
+    imports: [TasksListPage, MatSnackBarModule, NoopAnimationsModule],
     providers: [
       provideRouter([]),
       provideHttpClient(),
@@ -97,7 +103,7 @@ async function configure(projectId = '7'): Promise<{
   const httpMock = TestBed.inject(HttpTestingController);
   fixture.detectChanges();
   const requests = httpMock.match(`/api/v1/projects/${projectId}/tasks`);
-  for (const req of requests) req.flush(paginatedTasks(tasks));
+  for (const req of requests) req.flush(paginatedTasks(seedTasks as Task[]));
   return {
     component: fixture.componentInstance,
     fixture,
@@ -187,5 +193,85 @@ describe('TasksListPage', () => {
     expect(cards).toHaveLength(1);
     expect(cards[0]?.querySelector('.task-card__title')?.textContent?.trim()).toBe('Done');
     httpMock.verify();
+  });
+
+  it('filters by HIGH priority and shows only HIGH tasks', async () => {
+    const highLowTasks: Task[] = [
+      { id: 10, project_id: 7, name: 'Urgent', slug: 'urgent', description: null, status: 'open', priority: 'HIGH', archived_at: null, created_at: '', updated_at: '' },
+      { id: 11, project_id: 7, name: 'Backlog', slug: 'backlog', description: null, status: 'open', priority: 'LOW', archived_at: null, created_at: '', updated_at: '' },
+    ];
+    const { fixture, httpMock } = await configure('7', highLowTasks);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    const group = host.querySelector<HTMLElement>(
+      'mat-button-toggle-group[aria-label="Filter tasks by priority"]',
+    );
+    expect(group).not.toBeNull();
+    const toggles = group?.querySelectorAll<HTMLElement>('mat-button-toggle') ?? [];
+    expect(toggles).toHaveLength(4);
+
+    const highToggle = Array.from(toggles).find(
+      (toggle) => toggle.textContent?.trim() === 'High',
+    );
+    expect(highToggle).toBeDefined();
+    highToggle?.querySelector<HTMLButtonElement>('button')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const cards = host.querySelectorAll<HTMLElement>('.task-card');
+    expect(cards).toHaveLength(1);
+    expect(cards[0]?.querySelector('.task-card__title')?.textContent?.trim()).toBe('Urgent');
+    httpMock.verify();
+  });
+
+  it('surfaces a 409 task_has_active_boards archive failure as a friendly snackbar', async () => {
+    // Strategy: use the existing `configure()` helper so the page,
+    // FakeMatDialog, and HTTP bootstrap are wired the same way as the
+    // other tests. Then we mock TasksService.archive directly via a
+    // spy so the page receives a typed 409 ApiError without needing to
+    // drive the dialog or HTTP archive POST.
+    //
+    // IMPORTANT: The page imports `MatDialogModule` in its `imports`
+    // array, which provides `MatDialog` at the module level — that
+    // shadows the test bed's `useClass: FakeMatDialog`. So we grab the
+    // page's actual `MatDialog` instance and mock `.open` on it.
+    const harness = await configure();
+    const service = harness.service;
+    const typedApiError = {
+      kind: 'conflict' as const,
+      status: 409,
+      code: 'task_has_active_boards' as const,
+      message: 'Task 1 cannot be archived while it contains active boards.',
+    };
+    vi.spyOn(service, 'archive').mockImplementation(async () => {
+      throw typedApiError;
+    });
+    const snackBar = TestBed.inject(MatSnackBar);
+    const snackSpy = vi.spyOn(snackBar, 'open');
+
+    // The page's `MatDialog` is the one provided by `MatDialogModule`
+    // (imported by the page), not the test bed's FakeMatDialog. We
+    // mock `.open` on the page's instance so the dialog "closes" with
+    // the `archived` action and the page's promise chain runs.
+    const component = harness.component;
+    const pageDialog = (component as unknown as { dialog: MatDialog }).dialog;
+    vi.spyOn(pageDialog, 'open').mockReturnValue({
+      afterClosed: () => of({ action: 'archived' as const }),
+    } as unknown as ReturnType<MatDialog['open']>);
+
+    component['openEditor'](tasks[0]);
+    await harness.fixture.whenStable();
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    harness.fixture.detectChanges();
+
+    // The page must surface a snackbar with a friendly message — NOT
+    // let the raw 409 bubble to the console.
+    expect(snackSpy).toHaveBeenCalled();
+    const [message] = snackSpy.mock.calls[0] ?? [];
+    expect(typeof message).toBe('string');
+    expect(message as string).toContain('active Kanban board');
+    harness.httpMock.verify();
   });
 });

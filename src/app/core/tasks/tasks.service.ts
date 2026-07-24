@@ -1,6 +1,9 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import { Service, computed, inject, signal } from '@angular/core';
-import { firstValueFrom } from 'rxjs';
+import { catchError, firstValueFrom, throwError } from 'rxjs';
 
+import { ErrorNormalizer } from '../errors/error-normalizer';
+import type { ApiError } from '../errors/api-error';
 import type { Task, TaskPatch, TaskStatus } from './task.model';
 import { TasksApi } from './tasks.api';
 
@@ -67,12 +70,24 @@ export class TasksService {
   }
 
   async archive(projectId: number, taskId: number): Promise<Task> {
-    const task = await firstValueFrom(this.api.archive(projectId, taskId));
-    this._tasks.update((tasks) => tasks.filter((item) => item.id !== taskId));
-    if (this._currentId() === taskId) {
-      this.setActive(null);
+    try {
+      const task = await firstValueFrom(
+        this.api.archive(projectId, taskId).pipe(
+          catchError((err: unknown) => throwError(() => normalizeArchiveError(err))),
+        ),
+      );
+      this._tasks.update((tasks) => tasks.filter((item) => item.id !== taskId));
+      if (this._currentId() === taskId) {
+        this.setActive(null);
+      }
+      return task;
+    } catch (error) {
+      // On a 409 the task is still in the list — the caller (page or
+      // dialog) decides how to surface the typed error. We MUST NOT
+      // mutate the list here, or the user loses the task they were
+      // looking at without explanation.
+      throw error;
     }
-    return task;
   }
 
   async restore(projectId: number, taskId: number): Promise<Task> {
@@ -102,4 +117,25 @@ export class TasksService {
       localStorage.setItem(STORAGE_KEY, String(id));
     }
   }
+}
+
+/**
+ * Narrow whatever the API layer threw into a typed `ApiError`. The
+ * backend returns 409 with `{ message, code: 'task_has_active_boards' }`
+ * when the task still owns active Kanban boards; pages and dialogs
+ * branch on `kind === 'conflict' && code === 'task_has_active_boards'`
+ * to show a friendly message instead of letting the raw 409 reach the
+ * console. Any non-`HttpErrorResponse` throw is wrapped as a network
+ * error so the caller's `toUserMessage` always has a typed `ApiError`
+ * to render.
+ */
+function normalizeArchiveError(err: unknown): ApiError {
+  if (err instanceof HttpErrorResponse) {
+    return ErrorNormalizer.fromHttpErrorResponse(err);
+  }
+  return {
+    kind: 'http',
+    status: 0,
+    message: 'Could not archive the task. Please try again.',
+  };
 }

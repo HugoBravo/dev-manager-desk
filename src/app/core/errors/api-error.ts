@@ -29,11 +29,12 @@ export type ApiError =
       readonly status: 409;
       readonly message: string;
       /**
-       * Optional. A typed 409 (board_has_contents / column_has_contents)
-       * carries a `code`; an untyped 409 does NOT — the UI must fall back
-       * to a generic conflict message via {@link ErrorNormalizer.toUserMessage}.
+       * Optional. A typed 409 (board_has_contents / column_has_contents /
+       * task_has_active_boards) carries a `code`; an untyped 409 does NOT —
+       * the UI must fall back to a generic conflict message via
+       * {@link ErrorNormalizer.toUserMessage}.
        */
-      readonly code?: 'board_has_contents' | 'column_has_contents';
+      readonly code?: 'board_has_contents' | 'column_has_contents' | 'task_has_active_boards';
     }
   | {
       readonly kind: 'http';
