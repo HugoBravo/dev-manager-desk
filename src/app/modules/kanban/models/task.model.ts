@@ -8,4 +8,10 @@
  * shape here. If a future task surface adds a kanban-specific field, add
  * it to `core/tasks/task.model.ts` and re-export through here.
  */
-export type { Task, TaskPatch, TaskStatus, TaskSummary } from '../../../core/tasks/task.model';
+export type {
+  Task,
+  TaskPatch,
+  TaskPriority,
+  TaskStatus,
+  TaskSummary,
+} from '../../../core/tasks/task.model';

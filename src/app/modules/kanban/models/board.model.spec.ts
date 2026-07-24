@@ -16,6 +16,7 @@ describe('Board model (kanban-per-task ownership)', () => {
     name: 'Ship S4',
     slug: 'ship-s4',
     status: 'open',
+    priority: 'MEDIUM',
     archived_at: null,
   };
 

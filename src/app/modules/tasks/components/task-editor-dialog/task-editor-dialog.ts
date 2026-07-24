@@ -1,4 +1,4 @@
-import { Component, inject, signal, viewChild, ElementRef } from '@angular/core';
+import { Component, ElementRef, inject, signal, viewChild, viewChildren } from '@angular/core';
 import { FormField, form, required, submit, validate, maxLength } from '@angular/forms/signals';
 import { MatButtonModule } from '@angular/material/button';
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
@@ -8,11 +8,11 @@ import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSelectModule } from '@angular/material/select';
 
-import type { Task, TaskPatch } from '../../../../core/tasks/task.model';
+import type { Task, TaskPatch, TaskPriority } from '../../../../core/tasks/task.model';
 
 export interface TaskEditorDialogData { readonly task?: Task; }
 export interface TaskEditorDialogResult { readonly action: 'saved' | 'cancel' | 'archived'; readonly task?: TaskPatch & Pick<Task, 'name'>; }
-interface TaskFormModel { name: string; description: string; status: Task['status']; }
+interface TaskFormModel { name: string; description: string; status: Task['status']; priority: TaskPriority; }
 
 const NAME_MAX = 80;
 const DESCRIPTION_MAX = 500;
@@ -32,7 +32,7 @@ export function normalizeTaskDescription(value: string): string | null {
       </div>
       <div class="task-editor__titles">
         <h2 id="task-editor-title">{{ data.task ? 'Edit task' : 'Create task' }}</h2>
-        <p id="task-editor-subtitle">{{ data.task ? 'Update the task details.' : 'Give the task a clear name and status.' }}</p>
+        <p id="task-editor-subtitle">{{ data.task ? 'Update the task details.' : 'Give the task a clear name, status, and priority.' }}</p>
       </div>
       <button mat-icon-button type="button" class="task-editor__close" aria-label="Close dialog" (click)="cancel()">
         <mat-icon>close</mat-icon>
@@ -76,6 +76,40 @@ export function normalizeTaskDescription(value: string): string | null {
         <p class="task-editor__status-hint" aria-live="polite">
           <mat-icon aria-hidden="true">{{ currentStatus().icon }}</mat-icon>
           <span>{{ currentStatus().description }}</span>
+        </p>
+      </div>
+
+      <div class="task-editor__priority">
+        <p class="task-editor__priority-label" id="task-priority-label">Priority</p>
+        <div
+          class="task-editor__priority-options"
+          role="radiogroup"
+          aria-labelledby="task-priority-label"
+          data-testid="task-priority-group"
+          (keydown)="onPriorityKeydown($event)"
+        >
+          @for (option of priorityOptions; track option.value; let i = $index) {
+            <button
+              #priorityBtn
+              type="button"
+              role="radio"
+              [attr.data-priority]="option.value"
+              [attr.aria-checked]="taskForm.priority().value() === option.value"
+              [class.is-active]="taskForm.priority().value() === option.value"
+              class="task-editor__priority-chip"
+              (click)="setPriority(option.value)"
+              (focus)="onPriorityFocus(i)"
+              [attr.tabindex]="taskForm.priority().value() === option.value ? 0 : -1"
+              [attr.aria-label]="option.label + ' priority'"
+            >
+              <mat-icon aria-hidden="true">{{ option.icon }}</mat-icon>
+              <span>{{ option.label }}</span>
+            </button>
+          }
+        </div>
+        <p class="task-editor__priority-hint" aria-live="polite">
+          <mat-icon aria-hidden="true">{{ currentPriority().icon }}</mat-icon>
+          <span>{{ currentPriority().description }}</span>
         </p>
       </div>
     </form>
@@ -127,6 +161,18 @@ export function normalizeTaskDescription(value: string): string | null {
       .task-editor__status-chip mat-icon { font-size: 1.125rem; width: 1.125rem; height: 1.125rem; }
       .task-editor__status-hint { display: flex; align-items: center; gap: 0.375rem; margin: 0; font-size: 0.8125rem; color: rgba(255, 255, 255, 0.6); min-height: 1.25rem; }
 
+      .task-editor__priority { display: flex; flex-direction: column; gap: 0.5rem; padding-top: 0.25rem; }
+      .task-editor__priority-label { margin: 0; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: rgba(255, 255, 255, 0.6); }
+      .task-editor__priority-options { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; }
+      .task-editor__priority-chip { display: flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 0.625rem 0.5rem; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.12); background: rgba(255, 255, 255, 0.04); color: rgba(255, 255, 255, 0.85); cursor: pointer; font: inherit; transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease; }
+      .task-editor__priority-chip:hover:not(.is-active) { background: rgba(255, 255, 255, 0.08); border-color: rgba(255, 255, 255, 0.2); }
+      .task-editor__priority-chip[data-priority="HIGH"].is-active { background: rgba(244, 67, 54, 0.18); border-color: rgba(244, 67, 54, 0.55); color: #ef9a9a; }
+      .task-editor__priority-chip[data-priority="MEDIUM"].is-active { background: rgba(255, 152, 0, 0.18); border-color: rgba(255, 152, 0, 0.55); color: #ffb74d; }
+      .task-editor__priority-chip[data-priority="LOW"].is-active { background: rgba(76, 175, 80, 0.18); border-color: rgba(76, 175, 80, 0.55); color: #81c784; }
+      .task-editor__priority-chip:focus-visible { outline: 2px solid #90caf9; outline-offset: 2px; }
+      .task-editor__priority-chip mat-icon { font-size: 1.125rem; width: 1.125rem; height: 1.125rem; }
+      .task-editor__priority-hint { display: flex; align-items: center; gap: 0.375rem; margin: 0; font-size: 0.8125rem; color: rgba(255, 255, 255, 0.6); min-height: 1.25rem; }
+
       .task-editor__actions { display: flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1.25rem !important; border-top: 1px solid rgba(255, 255, 255, 0.08); margin: 0; }
       .task-editor__spacer { flex: 1 1 auto; }
       .task-editor__save mat-progress-spinner { display: inline-block; margin-right: 0.5rem; vertical-align: middle; }
@@ -148,14 +194,22 @@ export class TaskEditorDialog {
     { value: 'in_progress', label: 'In progress', icon: 'autorenew', description: 'Actively being worked on right now.' },
     { value: 'done', label: 'Done', icon: 'check_circle', description: 'Completed — ready to close or archive.' },
   ];
+  protected readonly priorityOptions: ReadonlyArray<{ readonly value: TaskPriority; readonly label: string; readonly icon: string; readonly description: string }> = [
+    { value: 'HIGH', label: 'High', icon: 'priority_high', description: 'Critical — needs immediate attention.' },
+    { value: 'MEDIUM', label: 'Medium', icon: 'drag_handle', description: 'Normal — schedule in the current sprint.' },
+    { value: 'LOW', label: 'Low', icon: 'low_priority', description: 'Backlog — pick up when capacity allows.' },
+  ];
   protected readonly currentStatus = () => this.statusOptions.find((o) => o.value === this.taskForm.status().value()) ?? this.statusOptions[0];
+  protected readonly currentPriority = () => this.priorityOptions.find((o) => o.value === this.taskForm.priority().value()) ?? this.priorityOptions[1];
   private readonly nameInput = viewChild<ElementRef<HTMLInputElement>>('nameInput');
+  private readonly priorityButtons = viewChildren<ElementRef<HTMLButtonElement>>('priorityBtn');
 
   protected readonly taskForm = form<TaskFormModel>(
     signal<TaskFormModel>({
       name: this.data.task?.name ?? '',
       description: this.data.task?.description ?? '',
       status: this.data.task?.status ?? 'open',
+      priority: this.data.task?.priority ?? 'MEDIUM',
     }),
     (path) => {
       required(path.name, { message: 'A name is required.' });
@@ -173,6 +227,65 @@ export class TaskEditorDialog {
     this.taskForm.status().value.set(status);
   }
 
+  protected setPriority(priority: TaskPriority): void {
+    this.taskForm.priority().value.set(priority);
+  }
+
+  /**
+   * Tracks which priority option most recently received DOM focus so
+   * `onPriorityKeydown` can resolve the focused option by index. We only
+   * need this to keep arrow-key navigation consistent: the selected
+   * option always carries `tabindex="0"`, so a Tab into the group lands
+   * on the selected one, and arrows move selection AND focus together.
+   */
+  private readonly focusedPriorityIndex = signal<number>(this.initialPriorityIndex());
+
+  private initialPriorityIndex(): number {
+    const initial = this.taskForm.priority().value();
+    const idx = this.priorityOptions.findIndex((o) => o.value === initial);
+    return idx >= 0 ? idx : 1;
+  }
+
+  protected onPriorityFocus(index: number): void {
+    this.focusedPriorityIndex.set(index);
+  }
+
+  /**
+   * Roving tabindex keyboard navigation for the priority radiogroup:
+   * arrows move focus AND selection (per WAI-ARIA radio group pattern),
+   * Home/End jump to the first/last option, and Space/Enter are ignored
+   * so the browser's default activation (click → setPriority) runs.
+   */
+  protected onPriorityKeydown(event: KeyboardEvent): void {
+    const total = this.priorityOptions.length;
+    let next: number | null = null;
+    switch (event.key) {
+      case 'ArrowDown':
+      case 'ArrowRight':
+        next = (this.focusedPriorityIndex() + 1) % total;
+        break;
+      case 'ArrowUp':
+      case 'ArrowLeft':
+        next = (this.focusedPriorityIndex() - 1 + total) % total;
+        break;
+      case 'Home':
+        next = 0;
+        break;
+      case 'End':
+        next = total - 1;
+        break;
+      default:
+        return;
+    }
+    event.preventDefault();
+    const buttons = this.priorityButtons();
+    const target = buttons[next]?.nativeElement;
+    if (!target) return;
+    this.focusedPriorityIndex.set(next);
+    target.focus();
+    this.setPriority(this.priorityOptions[next].value);
+  }
+
   protected async save(event: Event): Promise<void> {
     event.preventDefault();
     if (this.saving()) return;
@@ -182,7 +295,8 @@ export class TaskEditorDialog {
         const name = this.taskForm.name().value().trim();
         const description = normalizeTaskDescription(this.taskForm.description().value());
         const status = this.taskForm.status().value();
-        this.ref.close({ action: 'saved', task: { name, description, status } });
+        const priority = this.taskForm.priority().value();
+        this.ref.close({ action: 'saved', task: { name, description, status, priority } });
       });
     } finally {
       this.saving.set(false);

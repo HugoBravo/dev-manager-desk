@@ -4,17 +4,17 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { MatDialog } from '@angular/material/dialog';
 
-import { filterTasks, TasksListPage } from './tasks-list.page';
+import { filterTasks, priorityChip, TasksListPage } from './tasks-list.page';
 import { TasksService } from '../../../core/tasks/tasks.service';
 import { ProjectService } from '../../../core/projects/project.service';
 import { API_CONFIG } from '../../../core/config/api-config';
-import type { Task } from '../../../core/tasks/task.model';
+import type { Task, TaskPriority } from '../../../core/tasks/task.model';
 import type { Project } from '../../../core/projects/project.model';
 import { buildBoardRoute } from '../../kanban/utils/build-board-route';
 
 const tasks: Task[] = [
-  { id: 1, project_id: 7, name: 'Open', slug: 'open', description: null, status: 'open', archived_at: null, created_at: '', updated_at: '' },
-  { id: 2, project_id: 7, name: 'Done', slug: 'done', description: null, status: 'done', archived_at: null, created_at: '', updated_at: '' },
+  { id: 1, project_id: 7, name: 'Open', slug: 'open', description: null, status: 'open', priority: 'MEDIUM', archived_at: null, created_at: '', updated_at: '' },
+  { id: 2, project_id: 7, name: 'Done', slug: 'done', description: null, status: 'done', priority: 'LOW', archived_at: null, created_at: '', updated_at: '' },
 ];
 
 const project = (id: number): Project => ({
@@ -48,8 +48,27 @@ describe('filterTasks', () => {
   });
 });
 
+describe('priorityChip', () => {
+  it('returns a readable label and icon for every locked priority value', () => {
+    const labels: Readonly<Record<TaskPriority, string>> = { HIGH: 'High', MEDIUM: 'Medium', LOW: 'Low' };
+    for (const value of Object.keys(labels) as TaskPriority[]) {
+      const chip = priorityChip(value);
+      expect(chip.value).toBe(value);
+      expect(chip.label).toBe(labels[value]);
+      expect(chip.icon.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('covers every value of the TaskPriority union', () => {
+    expect(priorityChip('HIGH').value).toBe('HIGH');
+    expect(priorityChip('MEDIUM').value).toBe('MEDIUM');
+    expect(priorityChip('LOW').value).toBe('LOW');
+  });
+});
+
 async function configure(projectId = '7'): Promise<{
   component: TasksListPage;
+  fixture: ReturnType<typeof TestBed.createComponent<TasksListPage>>;
   service: TasksService;
   projects: ProjectService;
   router: Router;
@@ -76,6 +95,7 @@ async function configure(projectId = '7'): Promise<{
   for (const req of requests) req.flush(paginatedTasks(tasks));
   return {
     component: fixture.componentInstance,
+    fixture,
     service: TestBed.inject(TasksService),
     projects: TestBed.inject(ProjectService),
     router: TestBed.inject(Router),
@@ -112,6 +132,27 @@ describe('TasksListPage', () => {
     component['select'](tasks[0]);
     expect(setActive).not.toHaveBeenCalled();
     expect(navSpy).toHaveBeenCalledWith(buildBoardRoute(7, 1));
+    httpMock.verify();
+  });
+
+  it('renders a priority chip per task with text label and data-priority attribute', async () => {
+    const { fixture, httpMock } = await configure();
+    // The bootstrap is async (`firstValueFrom(api.list(...))`); wait for the
+    // microtask to resolve and re-render before inspecting the rendered list.
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+    const chips = host.querySelectorAll<HTMLElement>('.task-card__priority');
+    expect(chips).toHaveLength(tasks.length);
+    const values = Array.from(chips).map((chip) => chip.getAttribute('data-priority'));
+    expect(values).toEqual(tasks.map((task) => task.priority));
+    // Pair color treatment with visible text — never colour-only.
+    for (const chip of Array.from(chips)) {
+      const label = chip.querySelector('.task-card__priority-label')?.textContent?.trim() ?? '';
+      expect(label.length).toBeGreaterThan(0);
+      expect(chip.querySelector('mat-icon')).not.toBeNull();
+      expect(chip.getAttribute('aria-label')).toMatch(/^Priority /);
+    }
     httpMock.verify();
   });
 });

@@ -22,7 +22,7 @@ export type { KanbanLabel } from './label.model';
 export { LABEL_PALETTE } from './label.model';
 export type { Paginated, Page, PageMeta, PageLinks } from './pagination.model';
 export type { Project } from '../../../core/projects/project.model';
-export type { Task, TaskPatch, TaskStatus, TaskSummary } from './task.model';
+export type { Task, TaskPatch, TaskPriority, TaskStatus, TaskSummary } from './task.model';
 
 /**
  * `BoardDetail` is the payload the read-only detail page renders in a single

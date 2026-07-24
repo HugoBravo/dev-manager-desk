@@ -3,6 +3,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
@@ -11,7 +12,7 @@ import { firstValueFrom } from 'rxjs';
 
 import { ProjectService } from '../../../core/projects/project.service';
 import { TasksService } from '../../../core/tasks/tasks.service';
-import type { Task, TaskStatus } from '../../../core/tasks/task.model';
+import type { Task, TaskPriority, TaskStatus } from '../../../core/tasks/task.model';
 import { buildBoardRoute } from '../../kanban/utils/build-board-route';
 import {
   TaskEditorDialog,
@@ -25,9 +26,25 @@ export function filterTasks(tasks: readonly Task[], status: TaskFilter): readonl
   return status === 'all' ? tasks : tasks.filter((task) => task.status === status);
 }
 
+interface PriorityChip {
+  readonly value: TaskPriority;
+  readonly label: string;
+  readonly icon: string;
+}
+
+const PRIORITY_CHIP: Readonly<Record<TaskPriority, PriorityChip>> = {
+  HIGH: { value: 'HIGH', label: 'High', icon: 'priority_high' },
+  MEDIUM: { value: 'MEDIUM', label: 'Medium', icon: 'drag_handle' },
+  LOW: { value: 'LOW', label: 'Low', icon: 'low_priority' },
+};
+
+export function priorityChip(priority: TaskPriority): PriorityChip {
+  return PRIORITY_CHIP[priority];
+}
+
 @Component({
   selector: 'app-tasks-list-page',
-  imports: [MatButtonModule, MatCardModule, MatDialogModule, MatFormFieldModule, MatInputModule, MatSelectModule, MatProgressSpinnerModule],
+  imports: [MatButtonModule, MatCardModule, MatDialogModule, MatFormFieldModule, MatIconModule, MatInputModule, MatSelectModule, MatProgressSpinnerModule],
   template: `
     <section class="tasks-page" aria-labelledby="tasks-title">
       <header class="tasks-header">
@@ -71,6 +88,14 @@ export function filterTasks(tasks: readonly Task[], status: TaskFilter): readonl
                   <mat-card-subtitle class="task-card__status">{{ task.status }}</mat-card-subtitle>
                 </mat-card-header>
                 <mat-card-content class="task-card__body">
+                  <span
+                    class="task-card__priority"
+                    [attr.data-priority]="task.priority"
+                    [attr.aria-label]="'Priority ' + priorityChip(task.priority).label"
+                  >
+                    <mat-icon aria-hidden="true" class="task-card__priority-icon">{{ priorityChip(task.priority).icon }}</mat-icon>
+                    <span class="task-card__priority-label">{{ priorityChip(task.priority).label }}</span>
+                  </span>
                   <p>{{ task.description || 'No description' }}</p>
                 </mat-card-content>
                 <mat-card-actions class="task-card__actions">
@@ -101,8 +126,13 @@ export function filterTasks(tasks: readonly Task[], status: TaskFilter): readonl
       .task-card { height: 100%; display: flex; flex-direction: column; }
       .task-card__title { font-weight: 600; }
       .task-card__status { text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.05em; }
-      .task-card__body { flex: 1 1 auto; }
+      .task-card__body { flex: 1 1 auto; display: flex; flex-direction: column; gap: 0.75rem; }
       .task-card__body p { margin: 0; color: rgba(255, 255, 255, 0.75); }
+      .task-card__priority { display: inline-flex; align-items: center; gap: 0.375rem; align-self: flex-start; padding: 0.25rem 0.625rem; border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.12); background: rgba(255, 255, 255, 0.04); color: rgba(255, 255, 255, 0.85); font-size: 0.75rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; }
+      .task-card__priority-icon { font-size: 0.875rem; width: 0.875rem; height: 0.875rem; line-height: 0.875rem; }
+      .task-card__priority[data-priority="HIGH"] { background: rgba(244, 67, 54, 0.18); border-color: rgba(244, 67, 54, 0.55); color: #ef9a9a; }
+      .task-card__priority[data-priority="MEDIUM"] { background: rgba(255, 152, 0, 0.18); border-color: rgba(255, 152, 0, 0.55); color: #ffb74d; }
+      .task-card__priority[data-priority="LOW"] { background: rgba(76, 175, 80, 0.18); border-color: rgba(76, 175, 80, 0.55); color: #81c784; }
       .task-card__actions { display: flex; flex-wrap: wrap; gap: 0.5rem; padding: 0.5rem 1rem 1rem; }
     `,
   ],
@@ -119,6 +149,7 @@ export class TasksListPage {
   protected readonly error = this.service.error;
   protected readonly status = signal<TaskFilter>('all');
   protected readonly visibleTasks = computed(() => filterTasks(this.tasks(), this.status()));
+  protected readonly priorityChip = priorityChip;
 
   constructor() {
     effect(() => {

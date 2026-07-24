@@ -400,6 +400,7 @@ describe('KanbanWriteApi', () => {
         name: 'Ship S4',
         slug: 'ship-s4',
         status: 'open',
+        priority: 'MEDIUM',
         archived_at: null,
       },
       name: `Board ${id}`,

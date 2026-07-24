@@ -12,7 +12,7 @@ describe('paginate() in the kanban context', () => {
         {
           id: 1,
           task_id: 9,
-          task: { id: 9, name: 'Ship S4', slug: 'ship-s4', status: 'open', archived_at: null },
+          task: { id: 9, name: 'Ship S4', slug: 'ship-s4', status: 'open', priority: 'MEDIUM', archived_at: null },
           name: 'Sprint 1',
           position: 'n',
           archived_at: null,
@@ -22,7 +22,7 @@ describe('paginate() in the kanban context', () => {
         {
           id: 2,
           task_id: 9,
-          task: { id: 9, name: 'Ship S4', slug: 'ship-s4', status: 'open', archived_at: null },
+          task: { id: 9, name: 'Ship S4', slug: 'ship-s4', status: 'open', priority: 'MEDIUM', archived_at: null },
           name: 'Sprint 2',
           position: 'o',
           archived_at: null,
@@ -50,7 +50,7 @@ describe('paginate() in the kanban context', () => {
 
   it('paginateOnce() returns the Board list synchronously', () => {
     const envelope = {
-      data: [{ id: 1, task_id: 9, task: { id: 9, name: 'Ship S4', slug: 'ship-s4', status: 'open', archived_at: null }, name: 'X', position: 'n', archived_at: null, created_at: '', updated_at: '' }],
+      data: [{ id: 1, task_id: 9, task: { id: 9, name: 'Ship S4', slug: 'ship-s4', status: 'open', priority: 'MEDIUM', archived_at: null }, name: 'X', position: 'n', archived_at: null, created_at: '', updated_at: '' }],
       links: { first: '', last: '', prev: null, next: null },
       meta: { current_page: 1, from: 1, last_page: 1, per_page: 25, to: 1, total: 1, path: '' },
     };
