@@ -5,7 +5,7 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
-import { of } from 'rxjs';
+import { of, Subject } from 'rxjs';
 
 import { filterTasks, priorityChip, TasksListPage } from './tasks-list.page';
 import { TasksService } from '../../../core/tasks/tasks.service';
@@ -13,7 +13,13 @@ import { ProjectService } from '../../../core/projects/project.service';
 import { API_CONFIG } from '../../../core/config/api-config';
 import type { Task, TaskPriority } from '../../../core/tasks/task.model';
 import type { Project } from '../../../core/projects/project.model';
+import { KanbanApi } from '../../kanban/api/kanban.api';
+import type { Board } from '../../kanban/models/board.model';
 import { buildBoardRoute } from '../../kanban/utils/build-board-route';
+import {
+  ConfirmDialog,
+  type ConfirmDialogResult,
+} from '../../projects/components/confirm-dialog/confirm-dialog';
 
 const tasks: Task[] = [
   { id: 1, project_id: 7, name: 'Open', slug: 'open', description: null, status: 'open', priority: 'MEDIUM', archived_at: null, created_at: '', updated_at: '' },
@@ -226,6 +232,102 @@ describe('TasksListPage', () => {
     httpMock.verify();
   });
 
+  it('checks for active Kanban boards and shows confirmation before archiving', async () => {
+    const { component, service, httpMock } = await configure();
+    const kanbanApi = TestBed.inject(KanbanApi);
+    vi.spyOn(kanbanApi, 'listBoards').mockReturnValue(
+      of([{ id: 99 } as Board]),
+    );
+    const archiveSpy = vi.spyOn(service, 'archive').mockResolvedValue(tasks[0]!);
+    const pageDialog = (component as unknown as { dialog: MatDialog }).dialog;
+    const afterClosed = new Subject<ConfirmDialogResult>();
+    const openSpy = vi.spyOn(pageDialog, 'open').mockReturnValue({
+      afterClosed: () => afterClosed.asObservable(),
+    } as unknown as ReturnType<MatDialog['open']>);
+
+    const pendingArchive = component['archiveTask'](7, tasks[0]!);
+    await Promise.resolve();
+
+    expect(kanbanApi.listBoards).toHaveBeenCalledWith(7, 1);
+    expect(openSpy).toHaveBeenCalledWith(
+      ConfirmDialog,
+      expect.objectContaining({
+        data: expect.objectContaining({
+          message:
+            'This task has active Kanban boards. Archiving will leave them orphaned. Continue?',
+          confirmLabel: 'Archive anyway',
+        }),
+      }),
+    );
+    expect(archiveSpy).not.toHaveBeenCalled();
+
+    afterClosed.next({ confirmed: false });
+    await pendingArchive;
+    httpMock.verify();
+  });
+
+  it('archives after the active-board confirmation is accepted', async () => {
+    const { component, service, httpMock } = await configure();
+    const kanbanApi = TestBed.inject(KanbanApi);
+    vi.spyOn(kanbanApi, 'listBoards').mockReturnValue(
+      of([{ id: 99 } as Board]),
+    );
+    const archiveSpy = vi.spyOn(service, 'archive').mockResolvedValue(tasks[0]!);
+    const pageDialog = (component as unknown as { dialog: MatDialog }).dialog;
+    const afterClosed = new Subject<ConfirmDialogResult>();
+    const openSpy = vi.spyOn(pageDialog, 'open').mockReturnValue({
+      afterClosed: () => afterClosed.asObservable(),
+    } as unknown as ReturnType<MatDialog['open']>);
+
+    const pendingArchive = component['archiveTask'](7, tasks[0]!);
+    await Promise.resolve();
+
+    expect(openSpy).toHaveBeenCalled();
+    expect(archiveSpy).not.toHaveBeenCalled();
+
+    afterClosed.next({ confirmed: true });
+    await pendingArchive;
+
+    expect(archiveSpy).toHaveBeenCalledOnce();
+    expect(archiveSpy).toHaveBeenCalledWith(7, 1);
+    httpMock.verify();
+  });
+
+  it('does not archive when the active-board confirmation is cancelled', async () => {
+    const { component, service, httpMock } = await configure();
+    const kanbanApi = TestBed.inject(KanbanApi);
+    vi.spyOn(kanbanApi, 'listBoards').mockReturnValue(
+      of([{ id: 99 } as Board]),
+    );
+    const archiveSpy = vi.spyOn(service, 'archive').mockResolvedValue(tasks[0]!);
+    const pageDialog = (component as unknown as { dialog: MatDialog }).dialog;
+    vi.spyOn(pageDialog, 'open').mockReturnValue({
+      afterClosed: () => of({ confirmed: false }),
+    } as unknown as ReturnType<MatDialog['open']>);
+
+    await component['archiveTask'](7, tasks[0]!);
+
+    expect(archiveSpy).not.toHaveBeenCalled();
+    httpMock.verify();
+  });
+
+  it('archives directly without confirmation when the task has no active boards', async () => {
+    const { component, service, httpMock } = await configure();
+    const kanbanApi = TestBed.inject(KanbanApi);
+    vi.spyOn(kanbanApi, 'listBoards').mockReturnValue(of([]));
+    const archiveSpy = vi.spyOn(service, 'archive').mockResolvedValue(tasks[0]!);
+    const pageDialog = (component as unknown as { dialog: MatDialog }).dialog;
+    const openSpy = vi.spyOn(pageDialog, 'open');
+
+    await component['archiveTask'](7, tasks[0]!);
+
+    expect(kanbanApi.listBoards).toHaveBeenCalledWith(7, 1);
+    expect(openSpy).not.toHaveBeenCalled();
+    expect(archiveSpy).toHaveBeenCalledOnce();
+    expect(archiveSpy).toHaveBeenCalledWith(7, 1);
+    httpMock.verify();
+  });
+
   it('surfaces a 409 task_has_active_boards archive failure as a friendly snackbar', async () => {
     // Strategy: use the existing `configure()` helper so the page,
     // FakeMatDialog, and HTTP bootstrap are wired the same way as the
@@ -239,6 +341,8 @@ describe('TasksListPage', () => {
     // page's actual `MatDialog` instance and mock `.open` on it.
     const harness = await configure();
     const service = harness.service;
+    const kanbanApi = TestBed.inject(KanbanApi);
+    vi.spyOn(kanbanApi, 'listBoards').mockReturnValue(of([]));
     const typedApiError = {
       kind: 'conflict' as const,
       status: 409,

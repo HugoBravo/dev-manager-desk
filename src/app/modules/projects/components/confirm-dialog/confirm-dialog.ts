@@ -30,6 +30,8 @@ export interface ConfirmDialogData {
   readonly title: string;
   readonly message: string;
   readonly mode: 'archive' | 'delete';
+  /** Overrides the default destructive action label for archive confirmations. */
+  readonly confirmLabel?: string;
   /**
    * Required for `mode: 'delete'`; ignored in `mode: 'archive'`. The
    * user must type this string EXACTLY (trimmed equality) to enable the
@@ -94,8 +96,10 @@ export class ConfirmDialog implements OnInit {
 
   protected readonly expectedName = computed(() => this.data.projectName ?? '');
 
-  protected readonly confirmLabel = computed(() =>
-    this.data.mode === 'delete' ? 'Delete project' : 'Archive project',
+  protected readonly confirmLabel = computed(
+    () =>
+      this.data.confirmLabel ??
+      (this.data.mode === 'delete' ? 'Delete project' : 'Archive project'),
   );
 
   protected readonly confirmForm = form<ConfirmFormModel>(

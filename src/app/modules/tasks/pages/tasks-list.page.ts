@@ -17,6 +17,12 @@ import { ProjectService } from '../../../core/projects/project.service';
 import { TasksService } from '../../../core/tasks/tasks.service';
 import type { Task, TaskPriority, TaskStatus } from '../../../core/tasks/task.model';
 import { buildBoardRoute } from '../../kanban/utils/build-board-route';
+import { KanbanApi } from '../../kanban/api/kanban.api';
+import {
+  ConfirmDialog,
+  type ConfirmDialogData,
+  type ConfirmDialogResult,
+} from '../../projects/components/confirm-dialog/confirm-dialog';
 import { TaskCard } from '../components/task-card/task-card';
 import {
   TaskEditorDialog,
@@ -146,6 +152,7 @@ export class TasksListPage {
   readonly projectId = input<string>();
   private readonly projects = inject(ProjectService);
   private readonly service = inject(TasksService);
+  private readonly kanbanApi = inject(KanbanApi);
   private readonly dialog = inject(MatDialog);
   private readonly router = inject(Router);
   private readonly snackBar = inject(MatSnackBar);
@@ -196,16 +203,36 @@ export class TasksListPage {
   }
 
   /**
-   * Archive a task and surface any failure as a snackbar. The service
-   * rethrows HTTP 409 as a typed `ApiError` (kind: 'conflict',
-   * code: 'task_has_active_boards') so the page can show a friendly
-   * message instead of letting the raw 409 bubble to the console.
-   * Other errors fall through to the normalizer's generic user
-   * message — the user is always told something went wrong, just
-   * without the W3 "raw HttpErrorResponse" leak.
+   * Check for active boards before archiving. A task with active boards needs
+   * explicit confirmation because archiving it would orphan those boards.
+   * The backend 409 remains the final safety net if the board state changes
+   * between this preflight check and the archive request.
    */
   private async archiveTask(projectId: number, task: Task): Promise<void> {
     try {
+      const activeBoards = await firstValueFrom(
+        this.kanbanApi.listBoards(projectId, task.id),
+      );
+
+      if (activeBoards.length > 0) {
+        const data: ConfirmDialogData = {
+          title: 'Archive task?',
+          message:
+            'This task has active Kanban boards. Archiving will leave them orphaned. Continue?',
+          mode: 'archive',
+          confirmLabel: 'Archive anyway',
+        };
+        const ref = this.dialog.open<
+          ConfirmDialog,
+          ConfirmDialogData,
+          ConfirmDialogResult
+        >(ConfirmDialog, { data });
+        const result = await firstValueFrom(ref.afterClosed());
+        if (!result?.confirmed) {
+          return;
+        }
+      }
+
       await this.service.archive(projectId, task.id);
     } catch (err) {
       const apiError = err as ApiError | undefined;
