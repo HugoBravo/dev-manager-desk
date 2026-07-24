@@ -68,7 +68,7 @@ describe('ModulesShellPage', () => {
   }
 
   describe('sidebar nav labels (uppercase requirement)', () => {
-    it('renders PROJECTS, KANBAN, SECRETS, and CERRAR as uppercase literal text', () => {
+    it('renders PROJECTS, TASKS, SECRETS, USERS, and CERRAR as uppercase literal text', () => {
       const fixture = createShell();
       const host = fixture.nativeElement as HTMLElement;
       const visibleLabels = Array.from(
@@ -78,12 +78,25 @@ describe('ModulesShellPage', () => {
         .filter((text) => text.length > 0);
 
       expect(visibleLabels).toEqual(
-        expect.arrayContaining(['PROJECTS', 'KANBAN', 'SECRETS', 'CERRAR']),
+        expect.arrayContaining(['PROJECTS', 'TASKS', 'SECRETS', 'USERS', 'CERRAR']),
       );
       // The lowercase variants from the prior implementation must NOT
       // appear — labels are now literal uppercase strings (no CSS
       // text-transform dependency).
-      expect(visibleLabels).not.toEqual(expect.arrayContaining(['Projects', 'Secrets']));
+      expect(visibleLabels).not.toEqual(
+        expect.arrayContaining(['Projects', 'Tasks', 'Secrets', 'Users']),
+      );
+    });
+
+    it('does not render a Kanban navigation link or visible KANBAN label', () => {
+      const fixture = createShell();
+      const host = fixture.nativeElement as HTMLElement;
+      const visibleLabels = Array.from(
+        host.querySelectorAll('a[mat-list-item] span[matlistitemtitle], a.mat-mdc-list-item span'),
+      ).map((el) => (el.textContent ?? '').trim());
+
+      expect(host.querySelector('a[routerLink="kanban"]')).toBeNull();
+      expect(visibleLabels).not.toContain('KANBAN');
     });
 
     it('exposes sentence-case aria-label values on every nav link (not the uppercase visual text)', () => {
@@ -115,14 +128,14 @@ describe('ModulesShellPage', () => {
     });
   });
 
-  describe('Projects link wiring (REQ: PROJECTS click navigates to /modules/projects)', () => {
+  describe('sidebar feature link wiring', () => {
     it('wires each feature nav anchor with the matching routerLink segment', () => {
       const fixture = createShell();
       const host = fixture.nativeElement as HTMLElement;
       const routerLinks = Array.from(
-        host.querySelectorAll<HTMLAnchorElement>('a[mat-list-item]'),
+        host.querySelectorAll<HTMLAnchorElement>('a[mat-list-item][routerLink]'),
       ).map((a) => a.getAttribute('routerLink') ?? '');
-      expect(routerLinks).toEqual(expect.arrayContaining(['projects', 'kanban', 'secrets']));
+      expect(routerLinks).toEqual(['projects', 'tasks', 'secrets', 'users']);
     });
 
     it('anchors are NOT rendered as <button> with manual handlers (router contract)', () => {
@@ -131,7 +144,7 @@ describe('ModulesShellPage', () => {
       // not a hand-rolled click handler that bypasses navigation.
       const fixture = createShell();
       const host = fixture.nativeElement as HTMLElement;
-      for (const segment of ['projects', 'kanban', 'secrets']) {
+      for (const segment of ['projects', 'tasks', 'secrets', 'users']) {
         const link = Array.from(host.querySelectorAll<HTMLAnchorElement>('a[mat-list-item]')).find(
           (a) => (a.getAttribute('routerLink') ?? '') === segment,
         );

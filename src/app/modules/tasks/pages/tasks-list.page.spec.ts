@@ -131,6 +131,23 @@ describe('TasksListPage', () => {
     httpMock.verify();
   });
 
+  it('navigates to the board route when the Open Kanban button is clicked (click/state assertion)', async () => {
+    const { fixture, router, httpMock } = await configure();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const navSpy = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+
+    const host = fixture.nativeElement as HTMLElement;
+    const openButtons = Array.from(
+      host.querySelectorAll<HTMLButtonElement>('button.mat-mdc-unelevated-button'),
+    ).filter((btn) => btn.textContent?.trim() === 'Open Kanban');
+    expect(openButtons).toHaveLength(tasks.length);
+    openButtons[0]?.click();
+
+    expect(navSpy).toHaveBeenCalledWith(buildBoardRoute(7, 1));
+    httpMock.verify();
+  });
+
   it('revalidates the active project before navigating when the task belongs to another project', async () => {
     const { component, projects, router, httpMock } = await configure();
     const setActive = vi.spyOn(projects, 'setActive');

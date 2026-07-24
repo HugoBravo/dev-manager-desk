@@ -9,6 +9,7 @@ import { ProjectService } from '../../core/projects/project.service';
 import {
   ToolbarProjectPickerComponent,
   classifyFeature,
+  isCanonicalKanbanUrlFor,
   targetFor,
 } from './toolbar-project-picker.component';
 
@@ -48,6 +49,23 @@ describe('ToolbarProjectPickerComponent', () => {
           { path: 'modules/kanban/projects', children: [] },
           {
             path: 'modules/kanban/projects/:projectId/boards',
+            children: [],
+          },
+          {
+            path: 'modules/kanban/projects/:projectId/tasks/:taskId/boards',
+            children: [],
+          },
+          {
+            path: 'modules/kanban/projects/:projectId/tasks/:taskId/boards/trash',
+            children: [],
+          },
+          {
+            path: 'modules/kanban/projects/:projectId/tasks/:taskId/boards/:boardId',
+            children: [],
+          },
+          { path: 'modules/tasks', children: [] },
+          {
+            path: 'modules/tasks/projects/:projectId/tasks',
             children: [],
           },
           { path: 'modules/secrets', children: [] },
@@ -490,6 +508,142 @@ describe('ToolbarProjectPickerComponent', () => {
 
     expect(navigateByUrlSpy).not.toHaveBeenCalled();
   });
+
+  // -------- S4: preserve canonical Kanban URL on NavigationEnd --------
+  //
+  // Regression: clicking "Open Kanban" on a task used to land the user
+  // on /modules/kanban/projects/:projectId/tasks/:taskId/boards, but
+  // the toolbar picker's effect then re-fired on NavigationEnd and
+  // routed the user back to the tasks list. The effect now recognises
+  // a canonical task-scoped Kanban URL scoped to the active project
+  // and leaves it alone. These tests exercise the real router (no
+  // navigateByUrl mock) so the NavigationEnd feedback path is real.
+
+  it('preserves a canonical Kanban URL after NavigationEnd when the active project matches (Open Kanban regression)', async () => {
+    const service = TestBed.inject(ProjectService);
+    const httpMock = TestBed.inject(HttpTestingController);
+    const router = TestBed.inject(Router);
+
+    const p = service.bootstrap();
+    httpMock.expectOne(projectsUrl).flush(
+      paginated([
+        {
+          id: 7,
+          name: 'Demo',
+          slug: 'demo',
+          owner_id: 1,
+          archived_at: null,
+          created_at: '',
+          updated_at: '',
+        },
+      ]),
+    );
+    await p;
+
+    // Land on the tasks list for project 7 with project 7 active.
+    await router.navigateByUrl('/modules/tasks/projects/7/tasks');
+    service.setActive(service.projects()[0]!);
+
+    const fixture = TestBed.createComponent(ToolbarProjectPickerComponent);
+    fixture.detectChanges();
+    TestBed.tick();
+    await fixture.whenStable();
+    expect(router.url).toBe('/modules/tasks/projects/7/tasks');
+
+    // Simulate TasksListPage.select: a real router navigation to the
+    // canonical board URL. No spy — we want the real NavigationEnd to
+    // flow through the picker's subscription.
+    await router.navigateByUrl('/modules/kanban/projects/7/tasks/1/boards');
+    TestBed.tick();
+    await fixture.whenStable();
+
+    expect(router.url).toBe('/modules/kanban/projects/7/tasks/1/boards');
+  });
+
+  it('redirects to /modules/tasks/projects/2/tasks when switching from canonical Kanban for project 1 to project 2 (preserves the S2 project-switch behaviour)', async () => {
+    const service = TestBed.inject(ProjectService);
+    const httpMock = TestBed.inject(HttpTestingController);
+    const router = TestBed.inject(Router);
+
+    const projects = [
+      {
+        id: 1,
+        name: 'Alpha',
+        slug: 'alpha',
+        owner_id: 1,
+        archived_at: null,
+        created_at: '',
+        updated_at: '',
+      },
+      {
+        id: 2,
+        name: 'Beta',
+        slug: 'beta',
+        owner_id: 1,
+        archived_at: null,
+        created_at: '',
+        updated_at: '',
+      },
+    ];
+
+    const p = service.bootstrap();
+    httpMock.expectOne(projectsUrl).flush(paginated(projects));
+    await p;
+
+    await router.navigateByUrl('/modules/kanban/projects/1/tasks/1/boards');
+    service.setActive(service.projects().find((proj) => proj.id === 1) ?? null);
+
+    const fixture = TestBed.createComponent(ToolbarProjectPickerComponent);
+    fixture.detectChanges();
+    TestBed.tick();
+    await fixture.whenStable();
+    expect(router.url).toBe('/modules/kanban/projects/1/tasks/1/boards');
+
+    service.setActive(service.projects().find((proj) => proj.id === 2) ?? null);
+    TestBed.tick();
+    await fixture.whenStable();
+
+    expect(router.url).toBe('/modules/tasks/projects/2/tasks');
+  });
+
+  it('preserves a sub-route of the canonical Kanban URL (boards detail, trash) when the active project matches', async () => {
+    const service = TestBed.inject(ProjectService);
+    const httpMock = TestBed.inject(HttpTestingController);
+    const router = TestBed.inject(Router);
+
+    const p = service.bootstrap();
+    httpMock.expectOne(projectsUrl).flush(
+      paginated([
+        {
+          id: 7,
+          name: 'Demo',
+          slug: 'demo',
+          owner_id: 1,
+          archived_at: null,
+          created_at: '',
+          updated_at: '',
+        },
+      ]),
+    );
+    await p;
+
+    service.setActive(service.projects()[0]!);
+
+    const fixture = TestBed.createComponent(ToolbarProjectPickerComponent);
+    fixture.detectChanges();
+    TestBed.tick();
+    await fixture.whenStable();
+
+    await router.navigateByUrl('/modules/kanban/projects/7/tasks/1/boards/42');
+    TestBed.tick();
+    await fixture.whenStable();
+    expect(router.url).toBe('/modules/kanban/projects/7/tasks/1/boards/42');
+
+    await router.navigateByUrl('/modules/kanban/projects/7/tasks/1/boards/trash');
+    TestBed.tick();
+    await fixture.whenStable();
+    expect(router.url).toBe('/modules/kanban/projects/7/tasks/1/boards/trash');
+  });
 });
 
 describe('classifyFeature / targetFor (picker routing policy)', () => {
@@ -577,5 +731,32 @@ describe('classifyFeature / targetFor (picker routing policy)', () => {
     // URL stays put and the picker must never pick `/modules/kanban` for it.
     expect(targetFor('users', 8).url).not.toBe('/modules/kanban');
     expect(targetFor('users', 8).url).not.toMatch(/^\/modules\/kanban(\/|$)/);
+  });
+
+  it('isCanonicalKanbanUrlFor recognises the canonical task-scoped Kanban URL for the active project', () => {
+    expect(isCanonicalKanbanUrlFor('/modules/kanban/projects/7/tasks/1/boards', 7)).toBe(true);
+    expect(isCanonicalKanbanUrlFor('/modules/kanban/projects/7/tasks/1/boards/42', 7)).toBe(true);
+    expect(isCanonicalKanbanUrlFor('/modules/kanban/projects/7/tasks/1/boards/trash', 7)).toBe(true);
+    expect(isCanonicalKanbanUrlFor('/modules/kanban/projects/7/tasks/1/boards/', 7)).toBe(true);
+  });
+
+  it('isCanonicalKanbanUrlFor rejects URLs scoped to a different project', () => {
+    expect(isCanonicalKanbanUrlFor('/modules/kanban/projects/1/tasks/1/boards', 7)).toBe(false);
+    expect(isCanonicalKanbanUrlFor('/modules/kanban/projects/1/tasks/1/boards/42', 7)).toBe(false);
+  });
+
+  it('isCanonicalKanbanUrlFor rejects Kanban URLs without a :taskId (legacy bare boards URL)', () => {
+    expect(isCanonicalKanbanUrlFor('/modules/kanban/projects/7/boards', 7)).toBe(false);
+    expect(isCanonicalKanbanUrlFor('/modules/kanban', 7)).toBe(false);
+    expect(isCanonicalKanbanUrlFor('/modules/kanban/projects/7', 7)).toBe(false);
+    expect(isCanonicalKanbanUrlFor('/modules/kanban/projects/7/tasks', 7)).toBe(false);
+    expect(isCanonicalKanbanUrlFor('/modules/kanban/projects/7/tasks/1', 7)).toBe(false);
+  });
+
+  it('isCanonicalKanbanUrlFor rejects non-Kanban URLs even when the path shape matches', () => {
+    expect(isCanonicalKanbanUrlFor('/modules/tasks/projects/7/tasks/1/boards', 7)).toBe(false);
+    expect(isCanonicalKanbanUrlFor('/modules/secrets/projects/7/tasks/1/boards', 7)).toBe(false);
+    expect(isCanonicalKanbanUrlFor('/modules/projects', 7)).toBe(false);
+    expect(isCanonicalKanbanUrlFor('/dashboard', 7)).toBe(false);
   });
 });

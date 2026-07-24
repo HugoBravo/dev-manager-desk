@@ -115,17 +115,19 @@ export class ToolbarProjectPickerComponent {
       if (project === null) {
         return;
       }
+      // The toolbar MUST NOT bounce the user out of a canonical Kanban
+      // task URL that's already scoped to the active project.
+      // `TasksListPage.select` navigates here directly from the tasks
+      // list; without this guard the picker would route the user right
+      // back to `/modules/tasks/projects/:projectId/tasks` on the
+      // NavigationEnd that fires after the kanban navigation lands.
+      if (isCanonicalKanbanUrlFor(url, project.id)) {
+        return;
+      }
       const target = targetFor(classifyFeature(url), project.id);
-      // Skip when we're already on the target route for this project.
-      // Covers initial bootstrap (no history entry) and any back/forward
-      // navigation that already lands on the right URL.
       if (url.startsWith(target.url)) {
         return;
       }
-      // Explicit switch: the URL is for a DIFFERENT project (or a
-      // landing route). Replace it with the target feature-scoped
-      // route so the per-project route param updates and the page's
-      // `projectId` effect re-fetches.
       void this.router.navigateByUrl(target.url);
     });
   }
@@ -161,6 +163,30 @@ export function classifyFeature(url: string): PickerFeature {
     return 'users';
   }
   return 'unknown';
+}
+
+/**
+ * Whether the URL is a canonical task-scoped Kanban URL for the active
+ * project. When `true`, the picker's effect MUST leave the URL alone —
+ * navigating away would yank the user out of the board they just opened
+ * from the tasks list.
+ *
+ * Canonical form: `/modules/kanban/projects/:projectId/tasks/:taskId/boards[/...]`.
+ * The `:projectId` segment must match the active project. A `:taskId`
+ * segment is required (S4 — boards are task-scoped in the URL).
+ */
+export function isCanonicalKanbanUrlFor(url: string, projectId: number): boolean {
+  if (classifyFeature(url) !== 'kanban') {
+    return false;
+  }
+  const normalized = stripTrailingSlash(url);
+  const match = /^\/modules\/kanban\/projects\/(\d+)\/tasks\/(\d+)\/boards(?:\/|$)/.exec(
+    normalized,
+  );
+  if (!match) {
+    return false;
+  }
+  return Number(match[1]) === projectId;
 }
 
 /**
