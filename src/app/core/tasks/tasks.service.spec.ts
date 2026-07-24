@@ -12,6 +12,7 @@ const firstTask: Task = {
   slug: 'first',
   description: null,
   status: 'open',
+  priority: 'MEDIUM',
   archived_at: null,
   created_at: '2026-07-21T00:00:00Z',
   updated_at: '2026-07-21T00:00:00Z',
@@ -53,5 +54,33 @@ describe('TasksService', () => {
 
     expect(service.currentId()).toBeNull();
     expect(localStorage.getItem('dev-manager-desk:task:selected')).toBeNull();
+  });
+
+  it('propagates the priority from create() and update() payloads through to the wire', async () => {
+    const created: Task = { ...firstTask, id: 10, name: 'Hot', priority: 'HIGH' };
+    api.create.mockReturnValue(of(created));
+    api.update.mockReturnValue(of({ ...created, priority: 'LOW' }));
+    const service = TestBed.inject(TasksService);
+
+    await service.bootstrap(7);
+    const result = await service.create(7, { name: 'Hot', description: null, status: 'open', priority: 'HIGH' });
+    expect(result.priority).toBe('HIGH');
+    expect(api.create).toHaveBeenCalledWith(7, expect.objectContaining({ priority: 'HIGH' }));
+    expect(service.tasks().some((task) => task.id === 10 && task.priority === 'HIGH')).toBe(true);
+
+    const updated = await service.update(7, 10, { priority: 'LOW' });
+    expect(updated.priority).toBe('LOW');
+    expect(api.update).toHaveBeenCalledWith(7, 10, { priority: 'LOW' });
+    expect(service.tasks().find((task) => task.id === 10)?.priority).toBe('LOW');
+  });
+
+  it('allows create() to omit priority and update() to preserve it', async () => {
+    const created: Task = { ...firstTask, id: 11, priority: 'MEDIUM' };
+    api.create.mockReturnValue(of(created));
+    const service = TestBed.inject(TasksService);
+    await service.bootstrap(7);
+    const result = await service.create(7, { name: 'Default', description: null, status: 'open' });
+    expect(result.priority).toBe('MEDIUM');
+    expect(api.create).toHaveBeenCalledWith(7, { name: 'Default', description: null, status: 'open' });
   });
 });
