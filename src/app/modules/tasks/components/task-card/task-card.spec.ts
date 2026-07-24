@@ -18,6 +18,13 @@ const task = (overrides: Partial<Task> = {}): Task => ({
 });
 
 describe('TaskCard', () => {
+  it('renders safely without a task input', async () => {
+    await TestBed.configureTestingModule({ imports: [TaskCard] }).compileComponents();
+    const fixture = TestBed.createComponent(TaskCard);
+
+    expect(() => fixture.detectChanges()).not.toThrow();
+    expect(fixture.nativeElement.querySelector('[data-testid="task-priority"]')).toBeNull();
+  });
   it('renders the task name, status, description, and accessible priority chip', async () => {
     await TestBed.configureTestingModule({ imports: [TaskCard] }).compileComponents();
     const fixture = TestBed.createComponent(TaskCard);
@@ -34,6 +41,7 @@ describe('TaskCard', () => {
     expect(chip?.querySelector('mat-icon')?.textContent?.trim()).toBe('priority_high');
     expect(chip?.getAttribute('aria-label')).toBe('Priority High');
   });
+
 
   it('keeps the card content visible for unnamed-description tasks and renders each priority variant', async () => {
     await TestBed.configureTestingModule({ imports: [TaskCard] }).compileComponents();

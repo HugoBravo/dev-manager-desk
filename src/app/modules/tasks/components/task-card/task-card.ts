@@ -24,27 +24,29 @@ export function priorityChip(priority: TaskPriority): PriorityChip {
   selector: 'app-task-card',
   imports: [MatCardModule, MatIconModule],
   template: `
-    <mat-card class="task-card">
-      <mat-card-header>
-        <mat-card-title class="task-card__title" data-testid="task-name">{{ task().name }}</mat-card-title>
-        <mat-card-subtitle class="task-card__status" data-testid="task-status">{{ task().status }}</mat-card-subtitle>
-      </mat-card-header>
-      <mat-card-content class="task-card__body">
-        <span
-          class="task-card__priority"
-          [class.task-card__priority--high]="task().priority === 'HIGH'"
-          [class.task-card__priority--medium]="task().priority === 'MEDIUM'"
-          [class.task-card__priority--low]="task().priority === 'LOW'"
-          data-testid="task-priority"
-          [attr.data-priority]="task().priority"
-          [attr.aria-label]="'Priority ' + priority().label"
-        >
-          <mat-icon aria-hidden="true" class="task-card__priority-icon">{{ priority().icon }}</mat-icon>
-          <span class="task-card__priority-label">{{ priority().label }}</span>
-        </span>
-        <p data-testid="task-description">{{ task().description || 'No description' }}</p>
-      </mat-card-content>
-    </mat-card>
+    @if (task(); as currentTask) {
+      <mat-card class="task-card">
+        <mat-card-header>
+          <mat-card-title class="task-card__title" data-testid="task-name">{{ currentTask.name }}</mat-card-title>
+          <mat-card-subtitle class="task-card__status" data-testid="task-status">{{ currentTask.status }}</mat-card-subtitle>
+        </mat-card-header>
+        <mat-card-content class="task-card__body">
+          <span
+            class="task-card__priority"
+            [class.task-card__priority--high]="currentTask.priority === 'HIGH'"
+            [class.task-card__priority--medium]="currentTask.priority === 'MEDIUM'"
+            [class.task-card__priority--low]="currentTask.priority === 'LOW'"
+            data-testid="task-priority"
+            [attr.data-priority]="currentTask.priority"
+            [attr.aria-label]="'Priority ' + priority().label"
+          >
+            <mat-icon aria-hidden="true" class="task-card__priority-icon">{{ priority().icon }}</mat-icon>
+            <span class="task-card__priority-label">{{ priority().label }}</span>
+          </span>
+          <p data-testid="task-description">{{ currentTask.description || 'No description' }}</p>
+        </mat-card-content>
+      </mat-card>
+    }
   `,
   styles: `
     :host { display: block; height: 100%; }
@@ -61,6 +63,9 @@ export function priorityChip(priority: TaskPriority): PriorityChip {
   `,
 })
 export class TaskCard {
-  readonly task = input.required<Task>();
-  protected readonly priority = computed(() => priorityChip(this.task().priority));
+  readonly task = input<Task | undefined>(undefined);
+  protected readonly priority = computed(() => {
+    const currentTask = this.task();
+    return priorityChip(currentTask?.priority ?? 'MEDIUM');
+  });
 }
