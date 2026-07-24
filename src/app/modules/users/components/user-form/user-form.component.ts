@@ -163,17 +163,19 @@ export class UserFormComponent {
 
   onSubmit(event: Event): void {
     event.preventDefault();
-    if (this.formGroup.invalid) {
-      this.formGroup.markAllAsTouched();
-      return;
-    }
     const raw = this.formGroup.getRawValue();
-    this.submitted.emit({
+    const normalized: UserFormValue = {
       name: raw.name.trim(),
       email: raw.email.trim(),
       password: raw.password,
       is_admin: raw.is_admin,
-    });
+    };
+    this.formGroup.setValue(normalized, { emitEvent: false });
+    if (this.formGroup.invalid) {
+      this.formGroup.markAllAsTouched();
+      return;
+    }
+    this.submitted.emit(normalized);
   }
 }
 
